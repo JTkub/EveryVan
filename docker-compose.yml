@@ -57,7 +57,7 @@ services:
     container_name: everyvan-web
     restart: unless-stopped
     ports:
-      - "8080:80"
+      - "8000:80"
     depends_on:
       api:
         condition: service_healthy
