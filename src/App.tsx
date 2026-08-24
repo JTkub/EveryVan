@@ -22,7 +22,7 @@ import {
   UsersRound,
   X,
 } from "lucide-react";
-import { DROP_OFF_POINTS, VanProvider, useVan } from "./context/VanContext";
+import { BOARDING_POINTS, VanProvider, useVan } from "./context/VanContext";
 import type { Booking, Van } from "./context/VanContext";
 import { api } from "./services/api";
 import type {
@@ -424,9 +424,10 @@ function TripCard({ van, onBook }: { van: Van; onBook: (van: Van) => void }) {
         </span>
         <span className="seat-capacity">{van.capacity} ที่นั่ง</span>
       </div>
+      <p className="trip-stops">จุดลง: {(van.dropOffPoints?.length ? van.dropOffPoints : [van.destination]).join(" · ")}</p>
       <button
         className="btn primary full"
-        disabled={van.status !== "Waiting" || free === 0}
+        disabled={van.status === "Completed" || van.status === "Accident" || free === 0}
         onClick={() => onBook(van)}
       >
         เลือกเที่ยวนี้ <ArrowRight size={16} />
@@ -541,38 +542,63 @@ function BookingPage({
     initialVan || null,
   );
   const [seat, setSeat] = useState<number | null>(null);
-  const [point, setPoint] = useState(boardingPoints[0] || "สถานีขนส่งหมอชิต 2");
+  const tripStops = (van: Van) => van.dropOffPoints?.length ? van.dropOffPoints : [van.destination];
+  const nextRouteStop = (van: Van) => {
+    const stops = tripStops(van);
+    const currentIndex = van.currentStop ? stops.indexOf(van.currentStop) : -1;
+    return stops[currentIndex + 1] || "";
+  };
+  const boardingOptionsFor = (van: Van) =>
+    van.status === "Waiting" ? boardingPoints : nextRouteStop(van) ? [nextRouteStop(van)] : [];
+  const canBook = (van: Van) => van.status === "Waiting" || (van.status === "Travelling" || van.status === "Departed") && !!nextRouteStop(van);
+  const [point, setPoint] = useState(initialVan && initialVan.status !== "Waiting" ? nextRouteStop(initialVan) : boardingPoints[0] || "สถานีขนส่งหมอชิต 2");
   const [dropOffPoint, setDropOffPoint] = useState(
-    initialVan ? (DROP_OFF_POINTS[initialVan.destination] || [initialVan.destination])[0] : "",
+    initialVan ? (initialVan.dropOffPoints?.[0] || initialVan.destination) : "",
   );
   const [date, setDate] = useState(initialVan?.date || bangkokDateInput());
   const [destinationFilter, setDestinationFilter] = useState("");
+  const [boardingFilter, setBoardingFilter] = useState("");
+  const [dropOffFilter, setDropOffFilter] = useState("");
   const [step, setStep] = useState(initialVan ? 2 : 1);
   const [booking, setBooking] = useState<Booking | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const sortThai = (values: string[]) => [...values].sort((a, b) => a.localeCompare(b, "th"));
+  const filterDropOffOptions = destinationFilter
+    ? sortThai([...new Set(vans.filter((van) => van.destination === destinationFilter).flatMap((van) => tripStops(van)))])
+    : [];
   const availableVans = vans.filter(
     (v) =>
-      v.status === "Waiting" &&
+      canBook(v) &&
       (!destinationFilter || v.destination === destinationFilter) &&
+      (!boardingFilter || boardingOptionsFor(v).includes(boardingFilter)) &&
+      (!dropOffFilter || (v.dropOffPoints?.length ? v.dropOffPoints : [v.destination]).includes(dropOffFilter)) &&
       (!v.date || v.date === date),
   );
   const seats = Array.from(
     { length: selectedVan?.capacity || 14 },
     (_, i) => i + 1,
   );
+  const boardingOptions = selectedVan ? boardingOptionsFor(selectedVan) : [];
   const dropOffOptions = selectedVan
-    ? DROP_OFF_POINTS[selectedVan.destination] || [selectedVan.destination]
+    ? selectedVan.status === "Waiting"
+      ? tripStops(selectedVan)
+      : tripStops(selectedVan).slice(tripStops(selectedVan).indexOf(point) + 1)
     : [];
   useEffect(() => {
     if (!selectedVan) return;
     const updatedVan = vans.find((van) => van.id === selectedVan.id);
     if (updatedVan) setSelectedVan(updatedVan);
   }, [vans, selectedVan?.id]);
+  useEffect(() => {
+    if (selectedVan && selectedVan.status !== "Waiting") setPoint(nextRouteStop(selectedVan));
+  }, [selectedVan?.id, selectedVan?.status, selectedVan?.currentStop]);
   const chooseVan = (v: Van) => {
     setSelectedVan(v);
     setSeat(null);
-    setDropOffPoint((DROP_OFF_POINTS[v.destination] || [v.destination])[0]);
+    setPoint(boardingFilter && boardingOptionsFor(v).includes(boardingFilter) ? boardingFilter : boardingOptionsFor(v)[0] || "");
+    const startsAt = v.status === "Waiting" ? 0 : tripStops(v).indexOf(nextRouteStop(v)) + 1;
+    setDropOffPoint(tripStops(v)[startsAt] || "");
     setStep(2);
   };
   const createBooking = async () => {
@@ -628,17 +654,31 @@ function BookingPage({
         <>
           <div className="search-panel">
             <div className="field">
+              <label>จุดขึ้นรถ</label>
+              <select value={boardingFilter} onChange={(e) => setBoardingFilter(e.target.value)}>
+                <option value="">ทุกจุดขึ้น</option>
+                {sortThai([...new Set([...BOARDING_POINTS, ...vans.map(nextRouteStop).filter(Boolean)])]).map((stop) => <option key={stop}>{stop}</option>)}
+              </select>
+            </div>
+            <div className="field">
               <label>ปลายทาง</label>
               <select
                 value={destinationFilter}
-                onChange={(e) => setDestinationFilter(e.target.value)}
+                onChange={(e) => { setDestinationFilter(e.target.value); setDropOffFilter(""); }}
               >
                 <option value="">ทุกปลายทาง</option>
-                {[...new Set(vans.map((v) => v.destination))].map((d) => (
+                {sortThai([...new Set(vans.map((v) => v.destination))]).map((d) => (
                   <option key={d} value={d}>
                     {d}
                   </option>
                 ))}
+              </select>
+            </div>
+            <div className="field">
+              <label>จุดลงรถย่อย</label>
+              <select value={dropOffFilter} disabled={!destinationFilter} onChange={(e) => setDropOffFilter(e.target.value)}>
+                <option value="">{destinationFilter ? "ทุกจุดลง" : "เลือกปลายทางก่อน"}</option>
+                {filterDropOffOptions.map((stop) => <option key={stop}>{stop}</option>)}
               </select>
             </div>
             <div className="field">
@@ -658,7 +698,7 @@ function BookingPage({
             <div>
               <h3>เที่ยวรถทั้งหมด</h3>
               <p className="muted">
-                พบ {availableVans.length} เที่ยวรถที่พร้อมให้บริการ
+                พบ {availableVans.length} เที่ยวรถที่รองรับเส้นทางที่เลือก
               </p>
             </div>
           </div>
@@ -760,10 +800,11 @@ function BookingPage({
             <div className="field">
               <label>จุดขึ้นรถ</label>
               <select value={point} onChange={(e) => setPoint(e.target.value)}>
-                {boardingPoints.map((p) => (
+                {sortThai(boardingOptions).map((p) => (
                   <option key={p}>{p}</option>
                 ))}
               </select>
+              {selectedVan.status !== "Waiting" && <small className="field-hint">รถกำลังเดินทาง: รับผู้โดยสารเพิ่มได้ที่จุดถัดไปเท่านั้น</small>}
             </div>
             <div className="field">
               <label>จุดลงรถ</label>
@@ -1238,6 +1279,7 @@ const newEmployeeForm = (): AccountFormState => ({
   department: "ฝ่ายจัดคิวรถ",
   employeeId: "",
   licenseId: "",
+  photo: "",
   thaiId: "",
   isActive: true,
 });
@@ -1293,6 +1335,7 @@ function AdminAccountsPage() {
       department: user.department,
       employeeId: user.employeeId,
       licenseId: user.licenseId,
+      photo: user.photo || "",
       thaiId: user.thaiId,
       isActive: user.isActive,
     });
@@ -1330,6 +1373,17 @@ function AdminAccountsPage() {
     } finally {
       setBusy(false);
     }
+  };
+  const selectDriverPhoto = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/") || file.size > 180 * 1024) {
+      setError("กรุณาเลือกไฟล์รูปภาพขนาดไม่เกิน 180 KB");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => setForm((current) => ({ ...current, photo: String(reader.result) }));
+    reader.readAsDataURL(file);
   };
 
   const toggleAccount = async (user: ManagedUser) => {
@@ -1562,16 +1616,8 @@ function AdminAccountsPage() {
                 />
               </div>
             ) : form.role === "driver" ? (
-              <div className="field">
-                <label>เลขใบอนุญาตขับรถ</label>
-                <input
-                  value={form.licenseId}
-                  onChange={(event) =>
-                    setForm({ ...form, licenseId: event.target.value })
-                  }
-                  required
-                />
-              </div>
+              <><div className="field"><label>เลขใบอนุญาตขับรถ</label><input value={form.licenseId} onChange={(event) => setForm({ ...form, licenseId: event.target.value })} required /></div>
+              <div className="field"><label>รูปคนขับ (ไม่เกิน 180 KB)</label><input type="file" accept="image/*" onChange={selectDriverPhoto} />{form.photo && <img className="driver-photo-preview" src={form.photo} alt="ตัวอย่างรูปคนขับ" />}</div></>
             ) : (
               <>
                 <div className="field">
@@ -2528,6 +2574,8 @@ function CreateTripPage() {
   const seats = vehicleCapacity(vehicle);
   const [price, setPrice] = useState(220);
   const [driverId, setDriverId] = useState("");
+  const [dropOffPoints, setDropOffPoints] = useState<string[]>([]);
+  const [dropOffInput, setDropOffInput] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -2540,6 +2588,7 @@ function CreateTripPage() {
       const [date, time] = departure.split("T");
       await createVanSchedule({
         destination,
+        dropOffPoints,
         departureTime: time,
         date,
         vanType: vehicle,
@@ -2552,6 +2601,7 @@ function CreateTripPage() {
         "เพิ่มเที่ยวรถเรียบร้อยแล้ว รายการใหม่แสดงในหน้าจัดการเที่ยวรถทันที",
       );
       setPlate("");
+      setDropOffPoints([]);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "ไม่สามารถเพิ่มเที่ยวรถได้",
@@ -2580,6 +2630,17 @@ function CreateTripPage() {
               onChange={(e) => setDestination(e.target.value)}
               required
             />
+          </div>
+          <div className="field">
+            <label>จุดลงรถย่อย</label>
+            <div className="inline-form">
+              <input value={dropOffInput} placeholder="เช่น ประตูท่าแพ" onChange={(e) => setDropOffInput(e.target.value)} />
+              <button type="button" className="btn secondary" onClick={() => { const point = dropOffInput.trim(); if (point && !dropOffPoints.includes(point)) { setDropOffPoints([...dropOffPoints, point]); setDropOffInput(""); } }}>เพิ่มจุด</button>
+            </div>
+            <div className="stop-chips">
+              {dropOffPoints.map((point) => <span className="stop-chip" key={point}>{point}<button type="button" aria-label={`ลบ ${point}`} onClick={() => setDropOffPoints(dropOffPoints.filter((item) => item !== point))}><X size={13} /></button></span>)}
+            </div>
+            <small className="field-hint">เพิ่มได้สูงสุด 30 จุด ผู้โดยสารจะเลือกได้เฉพาะรายการนี้</small>
           </div>
           <div className="field">
             <label>เวลาออกเดินทาง</label>
@@ -2650,7 +2711,7 @@ function CreateTripPage() {
           </div>
         </div>
         <div className="form-actions">
-          <button className="btn primary" disabled={!driverId || busy}>
+          <button className="btn primary" disabled={!driverId || !destination.trim() || !dropOffPoints.length || busy}>
             {busy ? "กำลังบันทึก..." : "บันทึกเที่ยวรถ"}{" "}
             <ArrowRight size={16} />
           </button>
@@ -2957,7 +3018,7 @@ function OperationsPage() {
     (b) => b.vanId === current?.id && b.status !== "Cancelled",
   );
   const routeStops = current
-    ? DROP_OFF_POINTS[current.destination] || [current.destination]
+    ? (current.dropOffPoints?.length ? current.dropOffPoints : [current.destination])
     : [];
   const passengersAtStop = (stop: string) =>
     passengers.filter((passenger) =>

@@ -233,7 +233,7 @@ def admin_user_record(user_id):
             """
             SELECT u.user_id,u.username,u.first_name,u.last_name,u.birthdate,u.phone,u.email,
                    u.role,u.is_active,u.create_at,s.department,s.id_card staff_id_card,
-                   d.license_id,p.id_card passenger_id_card
+                   d.license_id,d.photo,p.id_card passenger_id_card
             FROM app_user u
             LEFT JOIN staff s ON s.user_id=u.user_id
             LEFT JOIN driver d ON d.user_id=u.user_id
@@ -259,6 +259,7 @@ def admin_user_record(user_id):
         "department": (row["department"] or "") if is_staff_role else "",
         "employeeId": (row["staff_id_card"] or "") if is_staff_role else "",
         "licenseId": (row["license_id"] or "") if row["role"] == "driver" else "",
+        "photo": (row["photo"] or "") if row["role"] == "driver" else "",
         "thaiId": (
             (row["passenger_id_card"] or "") if row["role"] == "passenger" else ""
         ),
@@ -897,8 +898,8 @@ def update_managed_user(user_id):
                 linked = c.fetchone()
                 if linked:
                     c.execute(
-                        "UPDATE driver SET name=%s,license_id=%s,phone=%s WHERE driver_id=%s",
-                        (name, license_id, phone, linked["driver_id"]),
+                        "UPDATE driver SET name=%s,license_id=%s,phone=%s,photo=COALESCE(%s,photo) WHERE driver_id=%s",
+                        (name, license_id, phone, d.get("photo") or None, linked["driver_id"]),
                     )
                 else:
                     c.execute(
@@ -908,15 +909,15 @@ def update_managed_user(user_id):
                     by_license = c.fetchone()
                     if by_license and by_license["user_id"] is None:
                         c.execute(
-                            "UPDATE driver SET user_id=%s,name=%s,phone=%s WHERE driver_id=%s",
-                            (user_id, name, phone, by_license["driver_id"]),
+                            "UPDATE driver SET user_id=%s,name=%s,phone=%s,photo=COALESCE(%s,photo) WHERE driver_id=%s",
+                            (user_id, name, phone, d.get("photo") or None, by_license["driver_id"]),
                         )
                     elif by_license:
                         raise psycopg.errors.UniqueViolation
                     else:
                         c.execute(
-                            "INSERT INTO driver(user_id,name,license_id,phone,photo) VALUES(%s,%s,%s,%s,'')",
-                            (user_id, name, license_id, phone),
+                            "INSERT INTO driver(user_id,name,license_id,phone,photo) VALUES(%s,%s,%s,%s,%s)",
+                            (user_id, name, license_id, phone, d.get("photo") or ""),
                         )
                 c.execute("DELETE FROM staff WHERE user_id=%s", (user_id,))
             else:
@@ -1038,14 +1039,18 @@ def trips():
     u = current_user()
     with db().cursor() as c:
         c.execute(
-            "SELECT t.trip_id,t.trip_status,t.current_stop,t.current_stop_updated_at,t.fare,r.destination,s.departure_time,s.arrive_time,v.vehicle_type,v.license_plate,v.total_seats,d.driver_id,d.user_id driver_user_id,d.name driver_name,d.photo,d.license_id,COALESCE(array_agg(b.seat_number) FILTER(WHERE b.booking_status NOT IN ('cancelled','completed','alighted')),ARRAY[]::text[]) occupied,COALESCE(array_agg(b.seat_number) FILTER(WHERE b.booking_status='pending'),ARRAY[]::text[]) pending FROM trip t JOIN route r USING(route_id) JOIN schedule s USING(schedule_id) JOIN vehicle v USING(vehicle_id) JOIN driver d USING(driver_id) LEFT JOIN booking b USING(trip_id) WHERE s.active_status GROUP BY t.trip_id,t.fare,r.destination,s.departure_time,s.arrive_time,v.vehicle_type,v.license_plate,v.total_seats,d.driver_id,d.user_id,d.name,d.photo,d.license_id ORDER BY s.departure_time"
+            "SELECT t.trip_id,t.trip_status,t.current_stop,t.current_stop_updated_at,t.drop_off_points,t.fare,r.destination,s.departure_time,s.arrive_time,v.vehicle_type,v.license_plate,v.total_seats,d.driver_id,d.user_id driver_user_id,d.name driver_name,d.photo,d.license_id,COALESCE(array_agg(b.seat_number) FILTER(WHERE b.booking_status NOT IN ('cancelled','completed','alighted')),ARRAY[]::text[]) occupied,COALESCE(array_agg(b.seat_number) FILTER(WHERE b.booking_status='pending'),ARRAY[]::text[]) pending FROM trip t JOIN route r USING(route_id) JOIN schedule s USING(schedule_id) JOIN vehicle v USING(vehicle_id) JOIN driver d USING(driver_id) LEFT JOIN booking b USING(trip_id) WHERE s.active_status GROUP BY t.trip_id,t.trip_status,t.current_stop,t.current_stop_updated_at,t.drop_off_points,t.fare,r.destination,s.departure_time,s.arrive_time,v.vehicle_type,v.license_plate,v.total_seats,d.driver_id,d.user_id,d.name,d.photo,d.license_id ORDER BY s.departure_time"
         )
         out = []
         for x in c.fetchall():
             if u and u["role"] == "driver" and x["driver_user_id"] != u["user_id"]:
                 continue
-            if (not u or u["role"] == "passenger") and x["trip_status"] != "waiting":
-                continue
+            if not u or u["role"] == "passenger":
+                stops = x["drop_off_points"] or [x["destination"]]
+                current_index = stops.index(x["current_stop"]) if x["current_stop"] in stops else -1
+                has_next_stop = current_index + 1 < len(stops)
+                if x["trip_status"] != "waiting" and not (x["trip_status"] in ("travelling", "departed") and has_next_stop):
+                    continue
             out.append(
                 {
                     "id": str(x["trip_id"]),
@@ -1054,6 +1059,7 @@ def trips():
                     "capacity": x["total_seats"],
                     "status": x["trip_status"].title(),
                     "destination": x["destination"],
+                    "dropOffPoints": x["drop_off_points"] or [x["destination"]],
                     "departureTime": x["departure_time"].strftime("%H:%M"),
                     "arrivalTime": (
                         x["arrive_time"].strftime("%H:%M") if x["arrive_time"] else None
@@ -1096,6 +1102,12 @@ def create_trip():
     departure = d.get("departure_time")
     plate = str(d.get("license_plate", "")).strip()
     vehicle_type = str(d.get("vehicle_type", "Toyota Commuter")).strip()
+    raw_drop_off_points = d.get("drop_off_points", [])
+    if not isinstance(raw_drop_off_points, list):
+        return jsonify(error="จุดลงรถต้องเป็นรายการ"), 400
+    drop_off_points = list(dict.fromkeys(str(point).strip() for point in raw_drop_off_points if str(point).strip()))
+    if not drop_off_points or len(drop_off_points) > 30 or any(len(point) > 150 for point in drop_off_points):
+        return jsonify(error="กรุณาระบุจุดลงรถ 1-30 จุด และแต่ละจุดไม่เกิน 150 ตัวอักษร"), 400
     vehicle_capacities = {
         "Toyota Commuter": 14,
         "Toyota Commuter Premium": 10,
@@ -1164,8 +1176,8 @@ def create_trip():
                 )
                 schedule = c.fetchone()["schedule_id"]
                 c.execute(
-                    "INSERT INTO trip(route_id,driver_id,vehicle_id,schedule_id,fare) VALUES(%s,%s,%s,%s,%s) RETURNING *",
-                    (route, driver_id, vehicle, schedule, fare),
+                    "INSERT INTO trip(route_id,driver_id,vehicle_id,schedule_id,fare,drop_off_points) VALUES(%s,%s,%s,%s,%s,%s::jsonb) RETURNING *",
+                    (route, driver_id, vehicle, schedule, fare, json.dumps(drop_off_points)),
                 )
                 trip = c.fetchone()
                 audit("trip.create", "trip", trip["trip_id"], d)
@@ -1204,13 +1216,14 @@ def bookings():
 def create_booking():
     d = body()
     alighting_point = str(d.get("alighting_point", "")).strip()
+    boarding_point = str(d.get("boarding_point", "")).strip()
     try:
         trip_id = int(d.get("trip_id"))
         seat_number = int(d.get("seat_number"))
     except (TypeError, ValueError):
         return jsonify(error="ข้อมูลเที่ยวรถหรือที่นั่งไม่ถูกต้อง"), 400
-    if not alighting_point:
-        return jsonify(error="กรุณาระบุจุดลงรถ"), 400
+    if not alighting_point or not boarding_point:
+        return jsonify(error="กรุณาระบุจุดขึ้นและจุดลงรถ"), 400
     seat = str(seat_number)
     con = db()
     try:
@@ -1223,20 +1236,30 @@ def create_booking():
                 if not p:
                     return jsonify(error="ไม่พบข้อมูลผู้โดยสาร"), 400
                 c.execute(
-                    "SELECT t.schedule_id,t.fare,t.trip_status,v.total_seats,s.active_status,s.departure_time FROM trip t JOIN vehicle v USING(vehicle_id) JOIN schedule s USING(schedule_id) WHERE t.trip_id=%s FOR UPDATE",
+                    "SELECT t.schedule_id,t.fare,t.trip_status,t.drop_off_points,r.destination,v.total_seats,s.active_status,s.departure_time FROM trip t JOIN route r USING(route_id) JOIN vehicle v USING(vehicle_id) JOIN schedule s USING(schedule_id) WHERE t.trip_id=%s FOR UPDATE",
                     (trip_id,),
                 )
                 t = c.fetchone()
                 if not t:
                     return jsonify(error="ไม่พบเที่ยวรถ"), 404
-                if (
-                    t["trip_status"] != "waiting"
-                    or not t["active_status"]
-                    or t["departure_time"] <= now()
-                ):
+                if t["trip_status"] not in ("waiting", "travelling", "departed") or not t["active_status"]:
                     return jsonify(error="เที่ยวรถนี้ปิดรับการจองแล้ว"), 409
+                if t["trip_status"] == "waiting" and t["departure_time"] <= now():
+                    return jsonify(error="เที่ยวรถนี้ออกเดินทางแล้ว กรุณารอสถานะจุดรับถัดไป"), 409
                 if seat_number < 1 or seat_number > t["total_seats"]:
                     return jsonify(error="หมายเลขที่นั่งไม่ถูกต้อง"), 400
+                allowed_stops = t["drop_off_points"] or [t["destination"]]
+                if alighting_point not in allowed_stops:
+                    return jsonify(error="จุดลงรถนี้ไม่มีในเที่ยวรถที่เลือก"), 400
+                if t["trip_status"] in ("travelling", "departed"):
+                    current_index = allowed_stops.index(t["current_stop"]) if t["current_stop"] in allowed_stops else -1
+                    next_index = current_index + 1
+                    if next_index >= len(allowed_stops):
+                        return jsonify(error="รถผ่านทุกจุดรับระหว่างทางแล้ว"), 409
+                    if boarding_point != allowed_stops[next_index]:
+                        return jsonify(error="รถรับผู้โดยสารได้เฉพาะจุดถัดไปของเส้นทาง"), 409
+                    if alighting_point not in allowed_stops[next_index + 1:]:
+                        return jsonify(error="จุดลงต้องอยู่หลังจุดขึ้นของคุณ"), 400
                 c.execute(
                     "SELECT 1 FROM booking WHERE trip_id=%s AND seat_number=%s AND booking_status NOT IN ('cancelled','completed','alighted')",
                     (trip_id, seat),
@@ -1250,7 +1273,7 @@ def create_booking():
                         trip_id,
                         t["schedule_id"],
                         seat,
-                        d.get("boarding_point"),
+                        boarding_point,
                         alighting_point,
                     ),
                 )

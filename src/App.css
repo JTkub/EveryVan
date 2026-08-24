@@ -664,6 +664,14 @@ select {
   color: var(--muted);
   font-size: 10px;
 }
+.trip-stops { margin: -4px 0 12px; color: var(--muted); font-size: 10px; line-height: 1.5; }
+.inline-form { display: flex; gap: 8px; }
+.inline-form input { min-width: 0; flex: 1; }
+.inline-form .btn { flex: none; padding: 0 12px; }
+.stop-chips { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 9px; }
+.stop-chip { display: inline-flex; align-items: center; gap: 5px; padding: 5px 7px 5px 9px; border-radius: 999px; background: #e9f5f2; color: var(--primary-dark); font-size: 12px; }
+.stop-chip button { display: grid; place-items: center; padding: 0; border: 0; background: transparent; color: inherit; cursor: pointer; }
+.driver-photo-preview { width: 72px; height: 72px; margin-top: 8px; border-radius: 50%; object-fit: cover; border: 2px solid var(--line); }
 .route-dropoff-list {
   display: grid;
   gap: 12px;

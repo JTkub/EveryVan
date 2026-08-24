@@ -22,6 +22,8 @@ export interface Van {
   capacity: number;
   status: "Waiting" | "Travelling" | "Departed" | "Accident" | "Completed";
   destination: string;
+  /** จุดลงที่ผู้จัดคิวกำหนดเฉพาะสำหรับเที่ยวรถนี้ */
+  dropOffPoints?: string[];
   departureTime: string;
   arrivalTime?: string;
   price: number;
@@ -85,6 +87,7 @@ export interface UserProfile {
   phone: string;
   email: string;
   thaiId: string;
+  photo?: string;
   passportNo?: string;
 }
 
@@ -119,6 +122,7 @@ export interface ManagedUser {
   department: string;
   employeeId: string;
   licenseId: string;
+  photo?: string;
   thaiId: string;
 }
 
@@ -133,6 +137,7 @@ export interface EmployeeAccountInput {
   department: string;
   employeeId: string;
   licenseId: string;
+  photo?: string;
   isActive?: boolean;
 }
 
@@ -147,6 +152,7 @@ export interface ManagedAccountUpdateInput {
   department?: string;
   employeeId?: string;
   licenseId?: string;
+  photo?: string;
   thaiId?: string;
   isActive?: boolean;
 }

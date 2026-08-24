@@ -29,12 +29,6 @@ export const BOARDING_POINTS = [
   "สถานีขนส่งผู้โดยสารสายใต้ใหม่ (Southern Bus Terminal)",
   "จุดจอดรถตู้รังสิต (Rangsit)",
 ];
-export const DROP_OFF_POINTS: Record<string, string[]> = {
-  "พัทยา": ["นาเกลือ", "พัทยาเหนือ", "พัทยากลาง", "พัทยาใต้", "สถานีขนส่งพัทยา"],
-  "หัวหิน": ["ชะอำ", "หัวหินซอย 51", "ตลาดโต้รุ่งหัวหิน", "สถานีรถตู้หัวหิน"],
-  "ระยอง": ["บ้านฉาง", "นิคมมาบตาพุด", "ตัวเมืองระยอง", "สถานีขนส่งระยอง"],
-  "จันทบุรี": ["แกลง", "นายายอาม", "ตัวเมืองจันทบุรี", "สถานีขนส่งจันทบุรี"],
-};
 const OTP_VERIFIED_SESSION_KEY = "everyvan_otp_verified_token";
 
 interface VanContextType {
@@ -93,6 +87,7 @@ interface VanContextType {
     vanType: string;
     capacity: number;
     destination: string;
+    dropOffPoints: string[];
     departureTime: string;
     price: number;
     driverId: string;
@@ -463,6 +458,7 @@ export const VanProvider: React.FC<{ children: React.ReactNode }> = ({
     vanType: string;
     capacity: number;
     destination: string;
+    dropOffPoints: string[];
     departureTime: string;
     price: number;
     driverId: string;
@@ -470,6 +466,7 @@ export const VanProvider: React.FC<{ children: React.ReactNode }> = ({
   }) => {
     await api.vans.create({
       destination: data.destination,
+      drop_off_points: data.dropOffPoints,
       departure_time: `${data.date}T${data.departureTime}:00+07:00`,
       vehicle_type: data.vanType,
       license_plate: data.plateNo,

@@ -322,6 +322,7 @@ const mapVan = (v: any): Van => ({
   capacity: Number(v.capacity),
   status: v.status,
   destination: v.destination,
+  dropOffPoints: v.dropOffPoints || v.drop_off_points || [],
   departureTime: v.departureTime,
   arrivalTime: v.arrivalTime || undefined,
   price: Number(v.price || 220),
@@ -741,6 +742,7 @@ export const api = {
       ),
     create: (data: {
       destination: string;
+      drop_off_points: string[];
       departure_time: string;
       vehicle_type: string;
       license_plate: string;
@@ -765,6 +767,7 @@ export const api = {
             capacity: vehicleCapacity(data.vehicle_type),
             status: "Waiting",
             destination: data.destination,
+            dropOffPoints: data.drop_off_points,
             departureTime: data.departure_time.slice(11, 16),
             price: data.price,
             driverId: String(data.driver_id),

@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS trip (trip_id SERIAL PRIMARY KEY, route_id INT NOT NU
 ALTER TABLE trip ADD COLUMN IF NOT EXISTS fare NUMERIC(10,2) NOT NULL DEFAULT 220 CHECK(fare >= 0);
 ALTER TABLE trip ADD COLUMN IF NOT EXISTS current_stop VARCHAR(150);
 ALTER TABLE trip ADD COLUMN IF NOT EXISTS current_stop_updated_at TIMESTAMPTZ;
+ALTER TABLE trip ADD COLUMN IF NOT EXISTS drop_off_points JSONB NOT NULL DEFAULT '[]'::jsonb;
 CREATE TABLE IF NOT EXISTS booking (booking_id SERIAL PRIMARY KEY, passenger_id INT NOT NULL REFERENCES passenger(passenger_id), trip_id INT NOT NULL REFERENCES trip(trip_id), schedule_id INT NOT NULL REFERENCES schedule(schedule_id), seat_number VARCHAR(10) NOT NULL, boarding_point VARCHAR(150), alighting_point VARCHAR(150), booking_status VARCHAR(30) NOT NULL DEFAULT 'pending', booking_datetime TIMESTAMPTZ NOT NULL DEFAULT NOW(), expires_at TIMESTAMPTZ NOT NULL DEFAULT (NOW()+INTERVAL '5 minutes'));
 ALTER TABLE booking ADD COLUMN IF NOT EXISTS alighting_point VARCHAR(150);
 DROP INDEX IF EXISTS uq_active_trip_seat;
