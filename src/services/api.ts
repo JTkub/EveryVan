@@ -9,6 +9,7 @@ import type {
   EmployeeAccountInput,
   ManagedAccountUpdateInput,
 } from "../types/domain";
+import { vehicleCapacity } from "../utils/vehicle";
 
 const BASE = (
   import.meta.env.VITE_API_URL || "/api"
@@ -198,7 +199,7 @@ function seedDemo() {
         id: "2",
         plateNo: "10-2302 กรุงเทพฯ",
         vanType: "Toyota Commuter Premium",
-        capacity: 14,
+        capacity: 10,
         status: "Waiting",
         destination: "หัวหิน",
         departureTime: "10:00",
@@ -222,11 +223,16 @@ function seedDemo() {
       },
     ] as Van[]);
   } else {
-    const migrated = read<Van[]>(KEYS.vans, []).map((v) =>
-      v.status === "Waiting" && (!v.date || v.date < today)
-        ? { ...v, date: today }
-        : v,
-    );
+    const capacities: Record<string, number> = {
+      "Toyota Commuter": 14,
+      "Toyota Commuter Premium": 10,
+      "Toyota Commuter VIP": 8,
+    };
+    const migrated = read<Van[]>(KEYS.vans, []).map((v) => ({
+      ...v,
+      capacity: capacities[v.vanType] ?? v.capacity,
+      date: v.status === "Waiting" && (!v.date || v.date < today) ? today : v.date,
+    }));
     write(KEYS.vans, migrated);
   }
   if (!localStorage.getItem(KEYS.bookings))
@@ -321,7 +327,10 @@ const mapVan = (v: any): Van => ({
   price: Number(v.price || 220),
   driverId: String(v.driverId),
   occupiedSeats: (v.occupiedSeats || []).map(Number),
+  pendingSeats: (v.pendingSeats || []).map(Number),
   date: v.date,
+  currentStop: v.currentStop,
+  currentStopUpdatedAt: v.currentStopUpdatedAt,
 });
 const mapDriver = (d: any): Driver => ({
   id: String(d.driver_id ?? d.id),
@@ -338,6 +347,7 @@ const mapBooking = (b: any): Booking => ({
   passengerName: b.passenger_name ?? b.passengerName ?? "",
   passengerPhone: b.phone ?? b.passengerPhone ?? "",
   seatNo: Number(b.seat_number ?? b.seatNo),
+  dropOffPoint: b.alighting_point ?? b.dropOffPoint ?? "",
   date: b.departure_time
     ? bangkokDate(new Date(b.departure_time))
     : b.date || "",
@@ -350,6 +360,7 @@ const mapBooking = (b: any): Booking => ({
         pending: "Pending Payment",
         paid: "Paid",
         boarded: "Boarded",
+        alighted: "Alighted",
         completed: "Completed",
         cancelled: "Cancelled",
       } as any
@@ -450,6 +461,7 @@ export const api = {
               dob: data.profile.dob,
               phone: data.profile.phone,
               thaiId: data.profile.thaiId,
+              passportNo: data.profile.passportNo,
             }),
           }).then(() => ({ success: true })),
         () => {
@@ -657,6 +669,11 @@ export const api = {
           ),
         () => updateVan(id, { status }),
       ),
+    updateLocation: (id: string, currentStop: string) =>
+      request(`/trips/${id}/location`, {
+        method: "PATCH",
+        body: JSON.stringify({ current_stop: currentStop }),
+      }),
     updateDepartureTime: (id: string, departure_time: string) =>
       fallback(
         () =>
@@ -731,6 +748,8 @@ export const api = {
       driver_id: number;
       price: number;
     }) =>
+      // The client may run without the API, so enforce the same vehicle rules here.
+      // Do not trust a seat count passed by a form or browser devtools.
       fallback(
         () =>
           request<{ trip: any }>("/trips", {
@@ -743,13 +762,14 @@ export const api = {
             id: String(Date.now()),
             plateNo: data.license_plate,
             vanType: data.vehicle_type,
-            capacity: data.total_seats,
+            capacity: vehicleCapacity(data.vehicle_type),
             status: "Waiting",
             destination: data.destination,
             departureTime: data.departure_time.slice(11, 16),
             price: data.price,
             driverId: String(data.driver_id),
             occupiedSeats: [],
+            pendingSeats: [],
             date: data.departure_time.slice(0, 10),
           };
           write(KEYS.vans, [...vans, van]);
@@ -776,6 +796,7 @@ export const api = {
       vanId: string,
       seatNo: number,
       boardingPoint: string,
+      dropOffPoint: string,
       date: string,
       profile: UserProfile,
     ) =>
@@ -787,6 +808,7 @@ export const api = {
               trip_id: Number(vanId),
               seat_number: String(seatNo),
               boarding_point: boardingPoint,
+              alighting_point: dropOffPoint,
               date,
               amount: 220,
             }),
@@ -797,12 +819,16 @@ export const api = {
           if (van.occupiedSeats.includes(seatNo))
             throw new Error("ที่นั่งนี้ถูกจองแล้ว");
           updateVan(vanId, { occupiedSeats: [...van.occupiedSeats, seatNo] });
+          updateVan(vanId, {
+            pendingSeats: [...(van.pendingSeats || []), seatNo],
+          });
           const booking: Booking = {
             id: String(Date.now()),
             vanId,
             passengerName: profile.name,
             passengerPhone: profile.phone,
             seatNo,
+            dropOffPoint,
             date,
             timeSlot: van.departureTime,
             status: "Pending Payment",
@@ -821,6 +847,17 @@ export const api = {
             body: "{}",
           }).then((r) => mapBooking(r.booking)),
         () => {
+          const current = demoBookings().find((b) => b.id === id);
+          if (current) {
+            const van = demoVans().find((item) => item.id === current.vanId);
+            if (van) {
+              updateVan(van.id, {
+                pendingSeats: (van.pendingSeats || []).filter(
+                  (seat) => seat !== current.seatNo,
+                ),
+              });
+            }
+          }
           const bookings = demoBookings().map((b) =>
             b.id === id
               ? {
@@ -850,6 +887,8 @@ export const api = {
             occupiedSeats: demoVans()
               .find((v) => v.id === current.vanId)!
               .occupiedSeats.filter((s) => s !== current.seatNo),
+            pendingSeats: (demoVans().find((v) => v.id === current.vanId)!
+              .pendingSeats || []).filter((s) => s !== current.seatNo),
           });
           const bookings = demoBookings().map((b) =>
             b.id === id ? { ...b, status: "Cancelled" as const } : b,
@@ -875,6 +914,33 @@ export const api = {
           return bookings.find((b) => b.id === id)!;
         },
       ),
+    alight: (id: string) =>
+      fallback(
+        () =>
+          request<{ booking: any }>(`/bookings/${id}/alight`, {
+            method: "POST",
+            body: "{}",
+          }).then((r) => mapBooking(r.booking)),
+        () => {
+          const current = demoBookings().find((b) => b.id === id);
+          if (!current) throw new Error("ไม่พบการจอง");
+          updateVan(current.vanId, {
+            occupiedSeats: demoVans()
+              .find((v) => v.id === current.vanId)!
+              .occupiedSeats.filter((seat) => seat !== current.seatNo),
+          });
+          const bookings = demoBookings().map((b) =>
+            b.id === id ? { ...b, status: "Alighted" as const } : b,
+          );
+          write(KEYS.bookings, bookings);
+          return bookings.find((b) => b.id === id)!;
+        },
+      ),
+    alightStop: (tripId: string, stop: string) =>
+      request<{ count: number }>(`/trips/${tripId}/alight-stop`, {
+        method: "POST",
+        body: JSON.stringify({ alighting_point: stop }),
+      }),
   },
   drivers: {
     list: () =>
@@ -970,6 +1036,14 @@ export const api = {
         () => request("/notifications/read", { method: "POST", body: "{}" }),
         () => ({ ok: true }),
       ),
+  },
+  followers: {
+    list: () => request<{ outgoing: any[]; incoming: any[]; tracking: any[] }>("/followers"),
+    add: (phone: string, relationship: string) =>
+      request("/followers", { method: "POST", body: JSON.stringify({ phone, relationship }) }),
+    respond: (id: string, status: "accepted" | "denied") =>
+      request(`/followers/${id}`, { method: "PATCH", body: JSON.stringify({ status }) }),
+    remove: (id: string) => request(`/followers/${id}`, { method: "DELETE" }),
   },
   transactions: {
     list: () =>

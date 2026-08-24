@@ -11,7 +11,10 @@ class SchemaContractTests(unittest.TestCase):
 
     def test_prevents_double_booking(self):
         self.assertIn("uq_active_trip_seat", self.schema)
-        self.assertIn("where booking_status not in ('cancelled','completed')", self.schema)
+        self.assertIn(
+            "where booking_status not in ('cancelled','completed','alighted')",
+            self.schema,
+        )
 
     def test_sessions_expire_and_reviews_are_unique_per_booking(self):
         self.assertIn("create table if not exists auth_session", self.schema)

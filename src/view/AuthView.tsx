@@ -1,9 +1,16 @@
 import { useState } from "react";
-import { ArrowRight, BusFront, Eye, EyeOff, ShieldCheck } from "lucide-react";
+import {
+  ArrowRight,
+  BusFront,
+  Eye,
+  EyeOff,
+  ShieldCheck,
+  Smartphone,
+} from "lucide-react";
 import { useVan } from "../context/VanContext";
 
 export function AuthView() {
-  const { login, registerUser } = useVan();
+  const { login, registerUser, pendingOtpUser, verifyOtp, cancelOtp } = useVan();
   const [mode, setMode] = useState<"login" | "register">("login");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -12,6 +19,8 @@ export function AuthView() {
   const [email, setEmail] = useState("");
   const [dob, setDob] = useState("");
   const [thaiId, setThaiId] = useState("");
+  const [passportNo, setPassportNo] = useState("");
+  const [identityType, setIdentityType] = useState<"thaiId" | "passport">("thaiId");
   const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -22,14 +31,18 @@ export function AuthView() {
     setSuccess("");
     setBusy(true);
     try {
-      if (mode === "login") await login(username, password);
+      if (mode === "login") {
+        await login(username, password);
+        setPassword("");
+      }
       else {
         await registerUser(username, password, "passenger", {
           name,
           phone,
           email,
           dob,
-          thaiId,
+          thaiId: identityType === "thaiId" ? thaiId : "",
+          passportNo: identityType === "passport" ? passportNo : "",
         });
         setMode("login");
         setSuccess("สมัครสมาชิกสำเร็จ กรุณาเข้าสู่ระบบด้วยบัญชีใหม่");
@@ -47,6 +60,73 @@ export function AuthView() {
     setError("");
     setSuccess("");
   };
+  const submitOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setBusy(true);
+    try {
+      await verifyOtp(password);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "ยืนยัน OTP ไม่สำเร็จ");
+    } finally {
+      setBusy(false);
+    }
+  };
+  const maskedPhone = pendingOtpUser?.profile.phone
+    ? pendingOtpUser.profile.phone.replace(/(\d{3})\d+(\d{3})$/, "$1••••$2")
+    : "เบอร์โทรศัพท์ของคุณ";
+  if (pendingOtpUser) {
+    return (
+      <div className="auth-shell">
+        <div className="auth-visual">
+          <div className="auth-brand">
+            <span className="brand-mark"><BusFront size={21} /></span>
+            <span className="auth-brand-name">Every<span>Van</span></span>
+          </div>
+          <div className="auth-copy">
+            <p className="eyebrow">ACCOUNT SECURITY</p>
+            <h1>ยืนยัน<br /><em>ตัวตนของคุณ</em></h1>
+            <p>อีกขั้นตอนเดียวก่อนเข้าสู่ระบบอย่างปลอดภัย</p>
+          </div>
+        </div>
+        <div className="auth-form-wrap">
+          <div className="auth-card otp-card">
+            <div className="otp-icon"><Smartphone size={28} /></div>
+            <div className="auth-card-head">
+              <p className="eyebrow accent">TWO-FACTOR AUTHENTICATION</p>
+              <h2>กรอกรหัส OTP</h2>
+              <p className="muted">ส่งรหัสยืนยันไปที่ {maskedPhone} แล้ว</p>
+            </div>
+            {error && <div className="auth-error" role="alert">{error}</div>}
+            <form onSubmit={submitOtp} className="auth-form">
+              <div className="field">
+                <label>รหัส OTP</label>
+                <input
+                  className="otp-input"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  autoComplete="one-time-code"
+                  autoFocus
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value.replace(/\D/g, ""))}
+                  placeholder="OTP 6 หลัก"
+                  required
+                />
+                <small className="field-hint">โหมดทดสอบ: ใช้ตัวเลขใดก็ได้</small>
+              </div>
+              <button className="btn primary auth-submit" disabled={busy}>
+                {busy ? "กำลังยืนยัน..." : "ยืนยันและเข้าสู่ระบบ"} <ArrowRight size={16} />
+              </button>
+              <button type="button" className="text-button otp-cancel" onClick={() => void cancelOtp()}>
+                กลับไปหน้าเข้าสู่ระบบ
+              </button>
+            </form>
+          </div>
+          <p className="auth-footer">© {new Date().getFullYear()} EveryVan · ระบบจองรถตู้ที่คุณไว้ใจ</p>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="auth-shell">
       <div className="auth-visual">
@@ -171,19 +251,13 @@ export function AuthView() {
                   />
                 </div>
                 <div className="field">
-                  <label>เลขบัตรประชาชน 13 หลัก</label>
-                  <input
-                    inputMode="numeric"
-                    pattern="[0-9]{13}"
-                    value={thaiId}
-                    onChange={(e) =>
-                      setThaiId(e.target.value.replace(/\D/g, ""))
-                    }
-                    maxLength={13}
-                    title="กรุณากรอกเลขบัตรประชาชน 13 หลัก"
-                    required
-                  />
+                  <label>เอกสารยืนยันตัวตน</label>
+                  <select value={identityType} onChange={(e) => setIdentityType(e.target.value as "thaiId" | "passport")}>
+                    <option value="thaiId">เลขบัตรประชาชน 13 หลัก</option>
+                    <option value="passport">Passport</option>
+                  </select>
                 </div>
+                {identityType === "thaiId" ? <div className="field"><label>เลขบัตรประชาชน 13 หลัก</label><input inputMode="numeric" pattern="[0-9]{13}" value={thaiId} onChange={(e) => setThaiId(e.target.value.replace(/\D/g, ""))} maxLength={13} required /></div> : <div className="field"><label>เลข Passport</label><input value={passportNo} onChange={(e) => setPassportNo(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""))} maxLength={30} placeholder="เช่น AB1234567" required /></div>}
               </>
             )}
             <div className="field">

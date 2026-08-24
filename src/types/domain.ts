@@ -27,8 +27,20 @@ export interface Van {
   price: number;
   driverId: string;
   occupiedSeats: number[];
+  pendingSeats?: number[];
   accidentReport?: string;
   date?: string;
+  currentStop?: string;
+  currentStopUpdatedAt?: string;
+}
+
+export interface TravelFollower {
+  id: string;
+  name: string;
+  phone: string;
+  relationship: string;
+  status: "pending" | "accepted" | "denied";
+  trip?: { destination: string; currentStop?: string; status: string; departureTime: string };
 }
 
 export interface Booking {
@@ -37,9 +49,10 @@ export interface Booking {
   passengerName: string;
   passengerPhone: string;
   seatNo: number;
+  dropOffPoint: string;
   date: string;
   timeSlot: string;
-  status: "Pending Payment" | "Paid" | "Boarded" | "Completed" | "Cancelled";
+  status: "Pending Payment" | "Paid" | "Boarded" | "Alighted" | "Completed" | "Cancelled";
   createdAt: number;
   unpaidExpiresAt: number;
   paymentSlipUrl?: string;
@@ -72,6 +85,7 @@ export interface UserProfile {
   phone: string;
   email: string;
   thaiId: string;
+  passportNo?: string;
 }
 
 export interface SystemNotification {

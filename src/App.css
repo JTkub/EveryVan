@@ -606,6 +606,109 @@ select {
   font-weight: 500;
   color: var(--muted);
 }
+.trip-driver,
+.booking-driver {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 0 14px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.trip-driver img,
+.booking-driver img {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid #e6f4f4;
+}
+.trip-driver > span:nth-child(2) small,
+.trip-driver > span:nth-child(2) strong {
+  display: block;
+}
+.trip-driver > span:nth-child(2) strong,
+.booking-driver strong {
+  color: var(--ink);
+}
+.seat-capacity {
+  margin-left: auto;
+  border-radius: 999px;
+  background: #eef8f7;
+  color: var(--primary);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 5px 8px;
+  white-space: nowrap;
+}
+.seat-pending-text {
+  color: #b87818;
+}
+.seat-button.pending {
+  background: #fff3d8;
+  border-color: #f0c36b;
+  color: #a06500;
+}
+.pending-dot {
+  background: #e8a634;
+}
+.seat-sync-note {
+  margin: 12px 0 0;
+  text-align: center;
+  color: var(--muted);
+  font-size: 10px;
+}
+.field-hint {
+  display: block;
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 10px;
+}
+.route-dropoff-list {
+  display: grid;
+  gap: 12px;
+}
+.route-dropoff-stop {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+}
+.route-stop-marker {
+  align-self: stretch;
+  width: 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.route-stop-marker span {
+  display: grid;
+  place-items: center;
+  width: 25px;
+  height: 25px;
+  border-radius: 50%;
+  background: var(--blue);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+}
+.route-stop-marker i {
+  flex: 1;
+  margin-top: 4px;
+  border-left: 1px dashed #b8c8dd;
+}
+.route-dropoff-stop:last-child .route-stop-marker i {
+  visibility: hidden;
+}
+.route-dropoff-stop strong,
+.route-dropoff-stop small {
+  display: block;
+}
+.route-dropoff-stop small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 11px;
+}
 .filter-chip,
 .live-tag {
   font-size: 10px;
@@ -851,6 +954,10 @@ select {
 .seat-legend .occupied-dot {
   background: #edf0f3;
   border-color: #edf0f3;
+}
+.seat-legend .pending-dot {
+  background: #e8a634;
+  border-color: #e8a634;
 }
 .booking-summary {
   position: sticky;
@@ -1667,6 +1774,29 @@ td small {
   width: 100%;
   margin-top: 3px;
   padding: 13px;
+}
+.otp-card {
+  text-align: center;
+}
+.otp-icon {
+  width: 58px;
+  height: 58px;
+  display: grid;
+  place-items: center;
+  margin: 0 auto 18px;
+  color: var(--blue);
+  background: #eaf2ff;
+  border-radius: 18px;
+}
+.otp-input {
+  text-align: center;
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: 9px;
+}
+.otp-cancel {
+  align-self: center;
+  margin-top: 4px;
 }
 .demo-login {
   border-top: 1px solid var(--line);

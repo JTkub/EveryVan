@@ -1,6 +1,7 @@
 /* oxlint-disable react/only-export-components -- Context types, constants and hook intentionally share this module. */
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { api, apiStatus, type DataMode } from "../services/api";
+import { vehicleCapacity } from "../utils/vehicle";
 import type {
   Booking,
   Driver,
@@ -28,13 +29,23 @@ export const BOARDING_POINTS = [
   "สถานีขนส่งผู้โดยสารสายใต้ใหม่ (Southern Bus Terminal)",
   "จุดจอดรถตู้รังสิต (Rangsit)",
 ];
+export const DROP_OFF_POINTS: Record<string, string[]> = {
+  "พัทยา": ["นาเกลือ", "พัทยาเหนือ", "พัทยากลาง", "พัทยาใต้", "สถานีขนส่งพัทยา"],
+  "หัวหิน": ["ชะอำ", "หัวหินซอย 51", "ตลาดโต้รุ่งหัวหิน", "สถานีรถตู้หัวหิน"],
+  "ระยอง": ["บ้านฉาง", "นิคมมาบตาพุด", "ตัวเมืองระยอง", "สถานีขนส่งระยอง"],
+  "จันทบุรี": ["แกลง", "นายายอาม", "ตัวเมืองจันทบุรี", "สถานีขนส่งจันทบุรี"],
+};
+const OTP_VERIFIED_SESSION_KEY = "everyvan_otp_verified_token";
 
 interface VanContextType {
   // Session Auth State
   currentUser: SessionUser | null;
+  pendingOtpUser: SessionUser | null;
   token: string | null;
   dataMode: DataMode;
   login: (username: string, password: string) => Promise<void>;
+  verifyOtp: (code: string) => Promise<void>;
+  cancelOtp: () => Promise<void>;
   logout: () => Promise<void>;
   registerUser: (
     username: string,
@@ -63,6 +74,7 @@ interface VanContextType {
     vanId: string,
     seatNo: number,
     boardingPoint: string,
+    dropOffPoint: string,
     date: string,
   ) => Promise<Booking>;
   confirmPayment: (bookingId: string) => Promise<void>;
@@ -75,6 +87,7 @@ interface VanContextType {
   ) => Promise<void>;
   updateDepartureTime: (vanId: string, newTime: string) => Promise<void>;
   updateArrivalTime: (vanId: string, newTime: string) => Promise<void>;
+  updateCurrentStop: (vanId: string, currentStop: string) => Promise<void>;
   createVanSchedule: (data: {
     plateNo: string;
     vanType: string;
@@ -92,6 +105,8 @@ interface VanContextType {
     comment: string,
   ) => Promise<void>;
   boardPassenger: (bookingId: string) => Promise<boolean>;
+  alightPassenger: (bookingId: string) => Promise<boolean>;
+  alightPassengersAtStop: (vanId: string, stop: string) => Promise<number>;
   completeTrip: (vanId: string) => Promise<void>;
   fastForwardTime: (minutes: number) => void;
 }
@@ -102,6 +117,7 @@ export const VanProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
   const [currentUser, setCurrentUser] = useState<SessionUser | null>(null);
+  const [pendingOtpUser, setPendingOtpUser] = useState<SessionUser | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [dataMode, setDataMode] = useState<DataMode>(apiStatus.get());
 
@@ -193,9 +209,13 @@ export const VanProvider: React.FC<{ children: React.ReactNode }> = ({
       const session = await api.auth.getSession();
       if (session) {
         setToken(session.token);
-        setCurrentUser(session.user);
-        setNotifications(loadLocalNotifications(session.user.username));
-        await refreshDatabase(session.user.role);
+        if (sessionStorage.getItem(OTP_VERIFIED_SESSION_KEY) === session.token) {
+          setCurrentUser(session.user);
+          setNotifications(loadLocalNotifications(session.user.username));
+          await refreshDatabase(session.user.role);
+        } else {
+          setPendingOtpUser(session.user);
+        }
       } else {
         await refreshDatabase();
       }
@@ -205,7 +225,8 @@ export const VanProvider: React.FC<{ children: React.ReactNode }> = ({
 
   useEffect(() => {
     if (!currentUser) return;
-    const interval = setInterval(refreshDatabase, 30000);
+    // Poll frequently so released seats are reflected for every open client.
+    const interval = setInterval(refreshDatabase, 5000);
     return () => clearInterval(interval);
   }, [currentUser]);
 
@@ -264,20 +285,38 @@ export const VanProvider: React.FC<{ children: React.ReactNode }> = ({
   // Auth Operations
   const login = async (username: string, password: string) => {
     const res = await api.auth.login(username, password);
+    sessionStorage.removeItem(OTP_VERIFIED_SESSION_KEY);
     setToken(res.token);
-    setCurrentUser(res.user);
-    setNotifications(loadLocalNotifications(res.user.username));
-    await refreshDatabase(res.user.role);
+    setPendingOtpUser(res.user);
+  };
+
+  const verifyOtp = async (code: string) => {
+    if (!pendingOtpUser) throw new Error("ไม่พบรายการยืนยันตัวตน");
+    if (!/^\d+$/.test(code)) throw new Error("กรุณากรอกรหัส OTP เป็นตัวเลข");
+    if (token) sessionStorage.setItem(OTP_VERIFIED_SESSION_KEY, token);
+    setCurrentUser(pendingOtpUser);
+    setNotifications(loadLocalNotifications(pendingOtpUser.username));
+    await refreshDatabase(pendingOtpUser.role);
     addNotification(
-      `เข้าสู่ระบบในชื่อคุณ ${res.user.profile.name} สำเร็จ`,
+      `ยืนยัน OTP และเข้าสู่ระบบในชื่อคุณ ${pendingOtpUser.profile.name} สำเร็จ`,
       "payment_status",
     );
+    setPendingOtpUser(null);
+  };
+
+  const cancelOtp = async () => {
+    await api.auth.logout();
+    sessionStorage.removeItem(OTP_VERIFIED_SESSION_KEY);
+    setToken(null);
+    setPendingOtpUser(null);
   };
 
   const logout = async () => {
     await api.auth.logout();
+    sessionStorage.removeItem(OTP_VERIFIED_SESSION_KEY);
     setToken(null);
     setCurrentUser(null);
+    setPendingOtpUser(null);
     setNotifications([]);
   };
 
@@ -317,6 +356,7 @@ export const VanProvider: React.FC<{ children: React.ReactNode }> = ({
     vanId: string,
     seatNo: number,
     boardingPoint: string,
+    dropOffPoint: string,
     date: string,
   ) => {
     if (!currentUser) throw new Error("กรุณาเข้าสู่ระบบก่อนทำการจอง");
@@ -324,6 +364,7 @@ export const VanProvider: React.FC<{ children: React.ReactNode }> = ({
       vanId,
       seatNo,
       boardingPoint,
+      dropOffPoint,
       date,
       currentUser.profile,
     );
@@ -411,6 +452,11 @@ export const VanProvider: React.FC<{ children: React.ReactNode }> = ({
         "schedule_change",
       );
   };
+  const updateCurrentStop = async (vanId: string, currentStop: string) => {
+    await api.vans.updateLocation(vanId, currentStop);
+    await refreshDatabase();
+    addNotification(`รถอัปเดตจุดล่าสุด: ${currentStop}`, "schedule_change");
+  };
 
   const createVanSchedule = async (data: {
     plateNo: string;
@@ -427,7 +473,7 @@ export const VanProvider: React.FC<{ children: React.ReactNode }> = ({
       departure_time: `${data.date}T${data.departureTime}:00+07:00`,
       vehicle_type: data.vanType,
       license_plate: data.plateNo,
-      total_seats: data.capacity,
+      total_seats: vehicleCapacity(data.vanType),
       driver_id: Number(data.driverId),
       price: data.price,
     });
@@ -474,6 +520,31 @@ export const VanProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
+  const alightPassenger = async (bookingId: string): Promise<boolean> => {
+    try {
+      await api.bookings.alight(bookingId);
+      await refreshDatabase();
+      const b = bookings.find((item) => item.id === bookingId);
+      if (b) {
+        addNotification(
+          `ผู้โดยสาร ${b.passengerName} ลงระหว่างทางแล้ว ที่นั่ง ${b.seatNo} ว่างแล้ว`,
+          "schedule_change",
+        );
+      }
+      return true;
+    } catch (err) {
+      console.error(err);
+      return false;
+    }
+  };
+
+  const alightPassengersAtStop = async (vanId: string, stop: string) => {
+    const result = await api.bookings.alightStop(vanId, stop);
+    await refreshDatabase();
+    addNotification(`ยืนยันส่งผู้โดยสารลงที่ ${stop} แล้ว ${result.count} คน`, "departure");
+    return result.count;
+  };
+
   const completeTrip = async (vanId: string) => {
     await api.vans.completeTrip(vanId);
     await refreshDatabase();
@@ -511,9 +582,12 @@ export const VanProvider: React.FC<{ children: React.ReactNode }> = ({
     <VanContext.Provider
       value={{
         currentUser,
+        pendingOtpUser,
         token,
         dataMode,
         login,
+        verifyOtp,
+        cancelOtp,
         logout,
         registerUser,
         updateUserProfile,
@@ -532,9 +606,12 @@ export const VanProvider: React.FC<{ children: React.ReactNode }> = ({
         updateVanStatus,
         updateDepartureTime,
         updateArrivalTime,
+        updateCurrentStop,
         createVanSchedule,
         addReview,
         boardPassenger,
+        alightPassenger,
+        alightPassengersAtStop,
         completeTrip,
         fastForwardTime,
       }}

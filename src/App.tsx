@@ -22,7 +22,7 @@ import {
   UsersRound,
   X,
 } from "lucide-react";
-import { VanProvider, useVan } from "./context/VanContext";
+import { DROP_OFF_POINTS, VanProvider, useVan } from "./context/VanContext";
 import type { Booking, Van } from "./context/VanContext";
 import { api } from "./services/api";
 import type {
@@ -39,6 +39,7 @@ import {
   thaiDate,
   thaiTodayLong,
 } from "./utils/date";
+import { VEHICLE_CAPACITIES, vehicleCapacity } from "./utils/vehicle";
 import "./App.css";
 
 type NavKey =
@@ -50,7 +51,8 @@ type NavKey =
   | "create-trip"
   | "scanner"
   | "reports"
-  | "accounts";
+  | "accounts"
+  | "followers";
 
 const statusText: Record<string, string> = {
   Waiting: "กำลังรอคิว",
@@ -60,6 +62,7 @@ const statusText: Record<string, string> = {
   Paid: "ชำระแล้ว",
   "Pending Payment": "รอชำระเงิน",
   Boarded: "ขึ้นรถแล้ว",
+  Alighted: "ลงระหว่างทางแล้ว",
   Completed: "เดินทางสำเร็จ",
   Cancelled: "ยกเลิกแล้ว",
 };
@@ -226,7 +229,7 @@ function Sidebar({
         <ChevronLeft size={14} />
       </div>
       <nav className="nav-list">
-        {items.map(({ key, icon: Icon, label }) => (
+        {[...items, { key: "followers" as NavKey, icon: UsersRound, label: "ผู้ติดตามการเดินทาง" }].map(({ key, icon: Icon, label }) => (
           <button
             key={key}
             className={`nav-link ${active === key ? "active" : ""}`}
@@ -369,7 +372,9 @@ function Stat({
 }
 
 function TripCard({ van, onBook }: { van: Van; onBook: (van: Van) => void }) {
+  const { drivers } = useVan();
   const free = van.capacity - van.occupiedSeats.length;
+  const driver = drivers.find((item) => item.id === van.driverId);
   return (
     <article className="trip-card">
       <div className="trip-top">
@@ -400,9 +405,24 @@ function TripCard({ van, onBook }: { van: Van; onBook: (van: Van) => void }) {
         <span>
           <UsersRound size={15} /> เหลือ {free} ที่นั่ง
         </span>
+        {!!van.pendingSeats?.length && (
+          <span className="seat-pending-text">กำลังจอง {van.pendingSeats.length} ที่นั่ง</span>
+        )}
         <strong>
           {van.price.toLocaleString()} <small>บาท</small>
         </strong>
+      </div>
+      <div className="trip-driver">
+        {driver?.avatar ? (
+          <img src={driver.avatar} alt={`รูปของ ${driver.name}`} />
+        ) : (
+          <span className="avatar small">{driver?.name.slice(0, 1) || "-"}</span>
+        )}
+        <span>
+          <small>ผู้ขับรถ</small>
+          <strong>{driver?.name || "กำลังระบุคนขับ"}</strong>
+        </span>
+        <span className="seat-capacity">{van.capacity} ที่นั่ง</span>
       </div>
       <button
         className="btn primary full"
@@ -516,12 +536,15 @@ function BookingPage({
   initialVan?: Van;
   onDone: () => void;
 }) {
-  const { vans, boardingPoints, bookTicket, confirmPayment } = useVan();
+  const { vans, drivers, boardingPoints, bookTicket, confirmPayment } = useVan();
   const [selectedVan, setSelectedVan] = useState<Van | null>(
     initialVan || null,
   );
   const [seat, setSeat] = useState<number | null>(null);
   const [point, setPoint] = useState(boardingPoints[0] || "สถานีขนส่งหมอชิต 2");
+  const [dropOffPoint, setDropOffPoint] = useState(
+    initialVan ? (DROP_OFF_POINTS[initialVan.destination] || [initialVan.destination])[0] : "",
+  );
   const [date, setDate] = useState(initialVan?.date || bangkokDateInput());
   const [destinationFilter, setDestinationFilter] = useState("");
   const [step, setStep] = useState(initialVan ? 2 : 1);
@@ -538,9 +561,18 @@ function BookingPage({
     { length: selectedVan?.capacity || 14 },
     (_, i) => i + 1,
   );
+  const dropOffOptions = selectedVan
+    ? DROP_OFF_POINTS[selectedVan.destination] || [selectedVan.destination]
+    : [];
+  useEffect(() => {
+    if (!selectedVan) return;
+    const updatedVan = vans.find((van) => van.id === selectedVan.id);
+    if (updatedVan) setSelectedVan(updatedVan);
+  }, [vans, selectedVan?.id]);
   const chooseVan = (v: Van) => {
     setSelectedVan(v);
     setSeat(null);
+    setDropOffPoint((DROP_OFF_POINTS[v.destination] || [v.destination])[0]);
     setStep(2);
   };
   const createBooking = async () => {
@@ -548,7 +580,7 @@ function BookingPage({
     setBusy(true);
     setError("");
     try {
-      const b = await bookTicket(selectedVan.id, seat, point, date);
+      const b = await bookTicket(selectedVan.id, seat, point, dropOffPoint, date);
       setBooking(b);
       setStep(4);
     } catch (e) {
@@ -660,6 +692,22 @@ function BookingPage({
               </div>
               <span>{selectedVan.price.toLocaleString()} บาท</span>
             </div>
+            <div className="booking-driver">
+              {(() => {
+                const driver = drivers.find((item) => item.id === selectedVan.driverId);
+                return (
+                  <>
+                    {driver?.avatar ? (
+                      <img src={driver.avatar} alt={`รูปของ ${driver.name}`} />
+                    ) : (
+                      <span className="avatar small">{driver?.name.slice(0, 1) || "-"}</span>
+                    )}
+                    <span>คนขับรถ: <strong>{driver?.name || "กำลังระบุคนขับ"}</strong></span>
+                    <span className="seat-capacity">รถ {selectedVan.vanType} · {selectedVan.capacity} ที่นั่ง</span>
+                  </>
+                );
+              })()}
+            </div>
             <div className="van-seat-map">
               <div className="seat-front">
                 ด้านหน้ารถ <span>คนขับ</span>
@@ -668,9 +716,10 @@ function BookingPage({
                 {seats.map((n) => (
                   <button
                     key={n}
-                    className={`seat-button ${selectedVan.occupiedSeats.includes(n) ? "occupied" : seat === n ? "selected" : ""}`}
+                    className={`seat-button ${selectedVan.pendingSeats?.includes(n) ? "pending" : selectedVan.occupiedSeats.includes(n) ? "occupied" : seat === n ? "selected" : ""}`}
                     disabled={selectedVan.occupiedSeats.includes(n)}
                     onClick={() => setSeat(n)}
+                    title={selectedVan.pendingSeats?.includes(n) ? "กำลังมีผู้โดยสารทำรายการจอง (หมดอายุภายใน 5 นาที)" : selectedVan.occupiedSeats.includes(n) ? "ที่นั่งนี้ถูกจองแล้ว" : "ที่นั่งว่าง"}
                   >
                     {String(n).padStart(2, "0")}
                   </button>
@@ -689,7 +738,12 @@ function BookingPage({
                   <i className="occupied-dot" />
                   ไม่ว่าง
                 </span>
+                <span>
+                  <i className="pending-dot" />
+                  กำลังจอง (5 นาที)
+                </span>
               </div>
+              <p className="seat-sync-note">สถานะที่นั่งอัปเดตอัตโนมัติทุก 5 วินาที</p>
             </div>
           </div>
           <aside className="booking-summary card-panel">
@@ -712,6 +766,12 @@ function BookingPage({
               </select>
             </div>
             <div className="field">
+              <label>จุดลงรถ</label>
+              <select value={dropOffPoint} onChange={(e) => setDropOffPoint(e.target.value)}>
+                {dropOffOptions.map((stop) => <option key={stop}>{stop}</option>)}
+              </select>
+            </div>
+            <div className="field">
               <label>วันที่เดินทาง</label>
               <input
                 type="date"
@@ -725,7 +785,7 @@ function BookingPage({
             </div>
             <button
               className="btn primary full"
-              disabled={!seat}
+              disabled={!seat || !dropOffPoint}
               onClick={() => setStep(3)}
             >
               ไปต่อ <ArrowRight size={16} />
@@ -1843,6 +1903,39 @@ function ReportsPage() {
   );
 }
 
+function FollowersPage() {
+  const { currentUser } = useVan();
+  const [data, setData] = useState<{ outgoing: any[]; incoming: any[]; tracking: any[] }>({ outgoing: [], incoming: [], tracking: [] });
+  const [phone, setPhone] = useState("");
+  const [relationship, setRelationship] = useState("");
+  const [error, setError] = useState("");
+  const load = async () => {
+    try { setData(await api.followers.list()); } catch (e) { setError(e instanceof Error ? e.message : "โหลดข้อมูลไม่สำเร็จ"); }
+  };
+  useEffect(() => {
+    void load();
+    const timer = window.setInterval(() => void load(), 5000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const add = async (event: React.FormEvent) => {
+    event.preventDefault(); setError("");
+    try { await api.followers.add(phone, relationship); setPhone(""); setRelationship(""); await load(); }
+    catch (e) { setError(e instanceof Error ? e.message : "ส่งคำขอไม่สำเร็จ"); }
+  };
+  return <div className="page-stack">
+    <div className="page-intro"><div><p className="eyebrow accent">TRAVEL FOLLOWERS</p><h2>ผู้ติดตามการเดินทาง</h2><p className="muted">ให้คนที่ไว้ใจติดตามสถานะรถของคุณหลังตอบรับคำขอ</p></div></div>
+    {currentUser?.role === "passenger" && <form className="card-panel form-grid" onSubmit={add}>
+      <div className="field"><label>เบอร์โทรผู้ติดตาม</label><input inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value.replace(/\D/g, ""))} required /></div>
+      <div className="field"><label>ความสัมพันธ์ (ไม่เกิน 10 ตัวอักษร)</label><input value={relationship} maxLength={10} onChange={(e) => setRelationship(e.target.value)} placeholder="เช่น คุณแม่" required /></div>
+      <div className="form-actions"><button className="btn primary">ส่งคำขอติดตาม</button></div>
+    </form>}
+    {error && <div className="alert error">{error}</div>}
+    {!!data.incoming.length && <section className="card-panel"><h3>คำขอที่รอการตอบรับ</h3>{data.incoming.map((item) => <div className="passenger-row" key={item.id}><div className="avatar small">{item.name.slice(0, 1)}</div><div><strong>{item.name}</strong><small>{item.relationship} · {item.phone}</small></div><button className="btn small primary" onClick={() => void api.followers.respond(item.id, "accepted").then(load)}>Accept</button><button className="btn small outline" onClick={() => void api.followers.respond(item.id, "denied").then(load)}>Deny</button></div>)}</section>}
+    <section className="card-panel"><h3>สถานะรถของคนที่ติดตาม</h3><p className="muted">อัปเดตตำแหน่งล่าสุดอัตโนมัติทุก 5 วินาที</p>{data.tracking.map((item) => <div className="passenger-row" key={item.id}><div className="avatar small">{item.name.slice(0, 1)}</div><div><strong>{item.name} <span className="muted">({item.relationship})</span></strong><small>{item.trip_status ? `รถถึง ${item.current_stop || "ระหว่างเส้นทาง"} · ปลายทาง ${item.destination} · ${item.trip_status}` : "ยังไม่มีเที่ยวรถที่กำลังเดินทาง"}</small>{item.current_stop_updated_at && <small>อัปเดตล่าสุด {new Date(item.current_stop_updated_at).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })}</small>}</div></div>)}{!data.tracking.length && <EmptyState text="ยังไม่มีคนที่อนุญาตให้คุณติดตาม" />}</section>
+    {currentUser?.role === "passenger" && <section className="card-panel"><h3>ผู้ติดตามที่คุณเพิ่ม</h3>{data.outgoing.map((item) => <div className="passenger-row" key={item.id}><div className="avatar small">{item.name.slice(0, 1)}</div><div><strong>{item.name}</strong><small>{item.relationship} · สถานะ {item.status}</small></div><button className="btn small danger-outline" onClick={() => void api.followers.remove(item.id).then(load)}>ลบ</button></div>)}{!data.outgoing.length && <EmptyState text="ยังไม่ได้เพิ่มผู้ติดตาม" />}</section>}
+  </div>;
+}
+
 function ProfilePage() {
   const { currentUser, updateUserProfile, changeOwnPassword } = useVan();
   const [form, setForm] = useState(currentUser?.profile);
@@ -2126,6 +2219,8 @@ function DashboardContent() {
                 ? "รายงานการเงิน"
                 : active === "accounts"
                   ? "จัดการบัญชี"
+                : active === "followers"
+                  ? "ผู้ติดตามการเดินทาง"
                 : active === "profile"
                   ? "ข้อมูลส่วนตัว"
                   : role === "accountant"
@@ -2144,6 +2239,8 @@ function DashboardContent() {
       />
     ) : active === "tickets" ? (
       <TicketsPageV2 />
+    ) : active === "followers" ? (
+      <FollowersPage />
     ) : active === "profile" ? (
       <ProfilePage />
     ) : active === "operations" ? (
@@ -2291,6 +2388,9 @@ function TicketsPageV2() {
                   <span>
                     <Grid2X2 size={15} /> ที่นั่ง {b.seatNo}
                   </span>
+                  <span>
+                    <MapPin size={15} /> ลงที่ {b.dropOffPoint || "ปลายทาง"}
+                  </span>
                 </div>
                 <div className="ticket-driver">
                   {driver?.avatar ? (
@@ -2425,7 +2525,7 @@ function CreateTripPage() {
   );
   const [vehicle, setVehicle] = useState("Toyota Commuter");
   const [plate, setPlate] = useState("");
-  const [seats, setSeats] = useState(14);
+  const seats = vehicleCapacity(vehicle);
   const [price, setPrice] = useState(220);
   const [driverId, setDriverId] = useState("");
   const [message, setMessage] = useState("");
@@ -2497,9 +2597,11 @@ function CreateTripPage() {
               value={vehicle}
               onChange={(e) => setVehicle(e.target.value)}
             >
-              <option>Toyota Commuter</option>
-              <option>Toyota Commuter Premium</option>
-              <option>Toyota Commuter VIP</option>
+              {Object.entries(VEHICLE_CAPACITIES).map(([type, capacity]) => (
+                <option value={type} key={type}>
+                  {type} ({capacity} ที่นั่ง)
+                </option>
+              ))}
             </select>
           </div>
           <div className="field">
@@ -2515,12 +2617,10 @@ function CreateTripPage() {
             <label>จำนวนที่นั่ง</label>
             <input
               type="number"
-              min="1"
-              max="30"
               value={seats}
-              onChange={(e) => setSeats(Number(e.target.value))}
-              required
+              readOnly
             />
+            <small className="field-hint">กำหนดตามประเภทรถที่เลือกโดยอัตโนมัติ</small>
           </div>
           <div className="field">
             <label>ค่าโดยสารต่อที่นั่ง (บาท)</label>
@@ -2827,7 +2927,10 @@ function OperationsPage() {
     updateVanStatus,
     updateDepartureTime,
     updateArrivalTime,
+    updateCurrentStop,
     boardPassenger,
+    alightPassenger,
+    alightPassengersAtStop,
     completeTrip,
   } = useVan();
   const [selected, setSelected] = useState<string>("");
@@ -2837,6 +2940,7 @@ function OperationsPage() {
   );
   const [scheduleTime, setScheduleTime] = useState("");
   const [arrivalTime, setArrivalTime] = useState("");
+  const [currentStop, setCurrentStop] = useState("");
   const [error, setError] = useState("");
   const [busyAction, setBusyAction] = useState("");
   const isDriver = currentUser?.role === "driver";
@@ -2852,6 +2956,13 @@ function OperationsPage() {
   const passengers = bookings.filter(
     (b) => b.vanId === current?.id && b.status !== "Cancelled",
   );
+  const routeStops = current
+    ? DROP_OFF_POINTS[current.destination] || [current.destination]
+    : [];
+  const passengersAtStop = (stop: string) =>
+    passengers.filter((passenger) =>
+      (passenger.dropOffPoint || current?.destination) === stop,
+    );
   const runAction = async (name: string, action: () => Promise<void>) => {
     setError("");
     setBusyAction(name);
@@ -2968,7 +3079,7 @@ function OperationsPage() {
               <div>
                 <strong>{p.passengerName}</strong>
                 <small>
-                  ที่นั่ง {p.seatNo} · Booking #{p.id}
+                  ที่นั่ง {p.seatNo} · ลงที่ {p.dropOffPoint || "ปลายทาง"} · Booking #{p.id}
                 </small>
               </div>
               <span className={`status-pill ${statusClass(p.status)}`}>
@@ -2990,6 +3101,23 @@ function OperationsPage() {
                     เช็กอิน
                   </button>
                 )}
+              {(isDriver ||
+                currentUser?.role === "staff" ||
+                currentUser?.role === "dispatcher") &&
+                p.status === "Boarded" && (
+                  <button
+                    className="btn small outline"
+                    disabled={busyAction === `alight-${p.id}`}
+                    onClick={() =>
+                      runAction(`alight-${p.id}`, async () => {
+                        const released = await alightPassenger(p.id);
+                        if (!released) throw new Error("ไม่สามารถปล่อยที่นั่งได้");
+                      })
+                    }
+                  >
+                    ลงระหว่างทาง
+                  </button>
+                )}
             </div>
           ))}
           {!passengers.length && (
@@ -3001,6 +3129,66 @@ function OperationsPage() {
           )}
         </div>
       </div>
+      {isDriver && current && (
+        <div className="card-panel route-dropoff-panel">
+          <div className="section-head compact">
+            <div>
+              <p className="eyebrow accent">ROUTE DROP-OFFS</p>
+              <h3>จุดลงผู้โดยสาร: กรุงเทพฯ → {current.destination}</h3>
+              <p className="muted">ตรวจรายชื่อและที่นั่งก่อนถึงแต่ละจุด</p>
+            </div>
+          </div>
+          <div className="route-dropoff-list">
+            {routeStops.map((stop, index) => {
+              const riders = passengersAtStop(stop);
+              const boardedRiders = riders.filter((rider) => rider.status === "Boarded");
+              return (
+                <div className="route-dropoff-stop" key={stop}>
+                  <div className="route-stop-marker">
+                    <span>{index + 1}</span>
+                    <i />
+                  </div>
+                  <div>
+                    <strong>{stop}</strong>
+                    {riders.length ? (
+                      <small>
+                        {riders.map((rider) => `${rider.passengerName} (ที่นั่ง ${rider.seatNo})`).join(" · ")}
+                      </small>
+                    ) : (
+                      <small>ไม่มีผู้โดยสารลงที่จุดนี้</small>
+                    )}
+                  </div>
+                  <span className="seat-capacity">{riders.length} คน</span>
+                  {!!boardedRiders.length && (
+                    <button
+                      className="btn small primary"
+                      disabled={!!busyAction}
+                      onClick={() => runAction(`alight-stop-${stop}`, () => alightPassengersAtStop(current.id, stop).then(() => undefined))}
+                    >
+                      ส่งผู้โดยสาร {boardedRiders.length} คน
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <div className="schedule-control route-location-control">
+            <select
+              value={currentStop || current.currentStop || routeStops[0] || ""}
+              onChange={(event) => setCurrentStop(event.target.value)}
+            >
+              {routeStops.map((stop) => <option key={stop}>{stop}</option>)}
+            </select>
+            <button
+              className="btn primary"
+              disabled={!!busyAction || !routeStops.length}
+              onClick={() => runAction("location", () => updateCurrentStop(current.id, currentStop || current.currentStop || routeStops[0]))}
+            >
+              {busyAction === "location" ? "กำลังอัปเดต..." : "อัปเดตจุดที่รถถึงแล้ว"}
+            </button>
+          </div>
+        </div>
+      )}
       {current && (
         <div className="action-bar">
           <div>
