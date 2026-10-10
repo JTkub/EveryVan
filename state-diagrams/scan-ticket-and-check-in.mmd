@@ -1,0 +1,39 @@
+stateDiagram-v2
+    direction TB
+    [*] --> ScannerReady
+    state "Camera or manual QR entry ready" as ScannerReady
+    state "Read QR and submit once" as ReadTicket
+    state "Validate driver session and QR format" as ValidateRequest
+    state "Lock ticket, booking and trip rows" as LockTicket
+    state TicketResult <<choice>>
+    state "Show invalid or unauthorized ticket" as Rejected
+    state "Confirm successful payment and active trip today" as ValidateJourney
+    state JourneyResult <<choice>>
+    state "Booking paid to boarded; ticket boarded; save scanned_at" as CheckIn
+    state "Insert check-in audit and commit transaction" as CommitCheckIn
+    state "Already checked in; keep original scanned_at" as AlreadyBoarded
+    state "Show check-in success and refresh passengers" as CheckInDisplayed
+
+    ScannerReady --> ReadTicket : Camera detects QR or driver submits code
+    ReadTicket --> ValidateRequest : POST /api/scan
+    ValidateRequest --> Rejected : Missing session, wrong role or malformed QR
+    ValidateRequest --> LockTicket : Driver and QR valid
+    LockTicket --> TicketResult : Resolve ticket and assigned driver
+    TicketResult --> Rejected : Ticket missing, wrong driver, unpaid or unusable booking
+    TicketResult --> AlreadyBoarded : Payment success and booking already boarded
+    TicketResult --> ValidateJourney : Payment success and booking paid
+    ValidateJourney --> JourneyResult
+    JourneyResult --> Rejected : Wrong Bangkok date, inactive trip or arrival passed
+    JourneyResult --> CheckIn : Today's active waiting, departed or travelling trip
+    CheckIn --> CommitCheckIn
+    CommitCheckIn --> CheckInDisplayed : API returns boarded status and saved scan time
+    AlreadyBoarded --> CheckInDisplayed : Return already_checked_in without another update
+    CheckInDisplayed --> ScannerReady : Scan next ticket
+    Rejected --> ScannerReady : Display API error and retry
+    ScannerReady --> [*] : Driver leaves scanner
+
+    note right of CheckIn
+        Scanning checks the passenger in immediately.
+        No separate confirmation button is required.
+        Concurrent scans are serialized by row locks.
+    end note

@@ -13,11 +13,14 @@ try:
 except ImportError:
     from security import check_password, hash_password, hash_token, new_session_token
 
+try:
+    from .recurring import BANGKOK, generate_daily_trips, lock_generation, normalize_template
+except ImportError:
+    from recurring import BANGKOK, generate_daily_trips, lock_generation, normalize_template
+
 ROOT = Path(__file__).resolve().parent
 load_dotenv(ROOT.parent / ".env")
-DATABASE_URL = os.getenv(
-    "DATABASE_URL", "postgresql://postgres:everyvan123@localhost:5433/van_ticket_qr"
-)
+DATABASE_URL = os.getenv("DATABASE_URL", "")
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 256 * 1024
 _schema_ready = False
@@ -46,6 +49,8 @@ def database_unavailable(_error):
 
 
 def db():
+    if not DATABASE_URL:
+        raise psycopg.OperationalError("DATABASE_URL is not configured")
     if "db" not in g:
         g.db = psycopg.connect(DATABASE_URL, row_factory=dict_row)
         with g.db.cursor() as cursor:
@@ -266,156 +271,29 @@ def admin_user_record(user_id):
     }
 
 
-def seed():
+def disable_default_demo_accounts():
+    # Retain booking history, but revoke the old bundled, publicly known logins.
+    known = {"pax": "ratchapol@everyvan.com", "driver": "somchai@everyvan.com",
+             "staff": "staff@everyvan.com", "accountant": "accountant@everyvan.com", "admin": "admin@everyvan.com"}
     with db().cursor() as c:
-        c.execute("SELECT COUNT(*) n FROM app_user")
-        if c.fetchone()["n"] == 0:
-            for first, last, birth, phone, email, pw, role in [
-                (
-                    "Ratchapol",
-                    "Thong-in",
-                    "1998-04-12",
-                    "0829998877",
-                    "ratchapol@everyvan.com",
-                    "pax",
-                    "passenger",
-                ),
-                (
-                    "Somchai",
-                    "Srichai",
-                    "1982-08-20",
-                    "0812345678",
-                    "somchai@everyvan.com",
-                    "driver",
-                    "driver",
-                ),
-                (
-                    "Naree",
-                    "Queue",
-                    "1991-06-11",
-                    "0811111111",
-                    "staff@everyvan.com",
-                    "staff",
-                    "staff",
-                ),
-                (
-                    "Pimchanok",
-                    "Account",
-                    "1990-03-24",
-                    "0822222222",
-                    "accountant@everyvan.com",
-                    "accountant",
-                    "accountant",
-                ),
-                (
-                    "Phudanet",
-                    "Silaart",
-                    "1992-10-15",
-                    "0851112233",
-                    "admin@everyvan.com",
-                    "admin",
-                    "admin",
-                ),
-            ]:
-                c.execute(
-                    "INSERT INTO app_user(first_name,last_name,username,birthdate,phone,email,password_user,role) VALUES(%s,%s,%s,%s,%s,%s,%s,%s) RETURNING user_id",
-                    (first, last, pw, birth, phone, email, hash_password(pw), role),
-                )
-                u = c.fetchone()["user_id"]
-                if role == "passenger":
-                    c.execute("INSERT INTO passenger(user_id) VALUES(%s)", (u,))
-                if role == "driver":
-                    c.execute(
-                        "INSERT INTO driver(user_id,name,license_id,phone,photo) VALUES(%s,%s,%s,%s,%s)",
-                        (
-                            u,
-                            first + " " + last,
-                            "DL-100245",
-                            phone,
-                            "/driver-somchai.png",
-                        ),
-                    )
-                if role in ("staff", "accountant"):
-                    c.execute(
-                        "INSERT INTO staff(user_id,department,id_card) VALUES(%s,%s,%s)",
-                        (
-                            u,
-                            "จัดคิวรถ" if role == "staff" else "ฝ่ายบัญชี",
-                            "EMP-" + role.upper(),
-                        ),
-                    )
-        for first, last, birth, phone, email, pw, role, department in [
-            (
-                "Naree",
-                "Queue",
-                "1991-06-11",
-                "0811111111",
-                "staff@everyvan.com",
-                "staff",
-                "staff",
-                "จัดคิวรถ",
-            ),
-            (
-                "Pimchanok",
-                "Account",
-                "1990-03-24",
-                "0822222222",
-                "accountant@everyvan.com",
-                "accountant",
-                "accountant",
-                "ฝ่ายบัญชี",
-            ),
-        ]:
-            c.execute("SELECT user_id FROM app_user WHERE username=%s", (pw,))
-            existing = c.fetchone()
-            if existing:
-                u = existing["user_id"]
-            else:
-                c.execute(
-                    "INSERT INTO app_user(first_name,last_name,username,birthdate,phone,email,password_user,role) VALUES(%s,%s,%s,%s,%s,%s,%s,%s) RETURNING user_id",
-                    (first, last, pw, birth, phone, email, hash_password(pw), role),
-                )
-                u = c.fetchone()["user_id"]
-            c.execute("SELECT 1 FROM staff WHERE user_id=%s", (u,))
-            if not c.fetchone():
-                c.execute(
-                    "INSERT INTO staff(user_id,department,id_card) VALUES(%s,%s,%s)",
-                    (u, department, "EMP-" + role.upper()),
-                )
-        c.execute("SELECT COUNT(*) n FROM route")
-        if c.fetchone()["n"] == 0:
-            for i, dest in enumerate(["พัทยา", "หัวหิน", "ระยอง", "จันทบุรี"], 1):
-                c.execute(
-                    "INSERT INTO route(origin,destination) VALUES('กรุงเทพฯ',%s) RETURNING route_id",
-                    (dest,),
-                )
-                rid = c.fetchone()["route_id"]
-                c.execute("SELECT driver_id FROM driver ORDER BY driver_id LIMIT 1")
-                did = c.fetchone()["driver_id"]
-                c.execute(
-                    "INSERT INTO vehicle(vehicle_type,status,license_plate,total_seats) VALUES('Toyota Commuter','waiting',%s,14) RETURNING vehicle_id",
-                    ("10-" + str(2300 + i) + " กรุงเทพฯ",),
-                )
-                vid = c.fetchone()["vehicle_id"]
-                for n in range(1, 15):
-                    c.execute(
-                        "INSERT INTO seat(vehicle_id,seat_number) VALUES(%s,%s)",
-                        (vid, str(n)),
-                    )
-                dep = now() + timedelta(hours=i + 1)
-                c.execute(
-                    "INSERT INTO schedule(departure_time,arrive_time) VALUES(%s,%s) RETURNING schedule_id",
-                    (dep, dep + timedelta(hours=2)),
-                )
-                sid = c.fetchone()["schedule_id"]
-                c.execute(
-                    "INSERT INTO trip(route_id,driver_id,vehicle_id,schedule_id) VALUES(%s,%s,%s,%s)",
-                    (rid, did, vid, sid),
-                )
-        c.execute(
-            "UPDATE driver d SET user_id=u.user_id FROM app_user u WHERE d.user_id IS NULL AND u.role='driver' AND d.phone=u.phone"
-        )
-    db().commit()
+        c.execute("SELECT user_id,username,email,password_user FROM app_user WHERE username=ANY(%s) AND is_active", (list(known),))
+        for user in c.fetchall():
+            if user["email"] == known[user["username"]] and check_password(user["username"], user["password_user"]):
+                c.execute("UPDATE app_user SET is_active=FALSE WHERE user_id=%s", (user["user_id"],))
+                c.execute("DELETE FROM auth_session WHERE user_id=%s", (user["user_id"],))
+
+
+def initialize_schema():
+    global _schema_ready
+    if not _schema_ready:
+        with _schema_lock:
+            if not _schema_ready:
+                with db().cursor() as c:
+                    c.execute("SELECT pg_advisory_xact_lock(73819023)")
+                    c.execute((ROOT / "ticket_schema.sql").read_text(encoding="utf8"))
+                disable_default_demo_accounts()
+                db().commit()
+                _schema_ready = True
 
 
 def cleanup_expired():
@@ -454,21 +332,14 @@ def before():
     if request.method == "OPTIONS":
         return "", 204
     if request.path.startswith("/api/"):
-        if not _schema_ready:
-            with _schema_lock:
-                if not _schema_ready:
-                    with db().cursor() as c:
-                        c.execute(
-                            (ROOT / "ticket_schema.sql").read_text(encoding="utf8")
-                        )
-                    db().commit()
-                    seed()
-                    _schema_ready = True
+        initialize_schema()
         current = time.monotonic()
         if current >= _next_maintenance_at and _maintenance_lock.acquire(
             blocking=False
         ):
             try:
+                generate_daily_trips(db())
+                db().commit()
                 cleanup_expired()
                 create_departure_notifications()
                 with db().cursor() as c:
@@ -1188,6 +1059,71 @@ def create_trip():
         return jsonify(error="ข้อมูลเที่ยวรถซ้ำกับรายการที่มีอยู่"), 409
 
 
+@app.get("/api/recurring-schedules")
+@require("staff", "dispatcher", "admin")
+def recurring_schedules():
+    with db().cursor() as c:
+        c.execute("""SELECT rs.*,r.destination,v.license_plate,v.vehicle_type,v.total_seats,d.name driver_name
+            FROM recurring_schedule rs JOIN route r USING(route_id)
+            JOIN vehicle v USING(vehicle_id) JOIN driver d USING(driver_id)
+            ORDER BY rs.departure_time,rs.recurring_id""")
+        items = c.fetchall()
+        for item in items:
+            item["departure_time"] = item["departure_time"].strftime("%H:%M")
+            item["start_date"] = item["start_date"].isoformat()
+            item["price"] = float(item.pop("fare"))
+    return jsonify(schedules=items)
+
+
+@app.post("/api/recurring-schedules")
+@app.put("/api/recurring-schedules/<int:recurring_id>")
+@require("staff", "dispatcher", "admin")
+def save_recurring_schedule(recurring_id=None):
+    try:
+        data = normalize_template(body())
+    except ValueError as error:
+        return jsonify(error=str(error)), 400
+    con = db()
+    try:
+        with con.cursor() as c:
+            lock_generation(c)
+            if recurring_id is not None:
+                c.execute("SELECT 1 FROM recurring_schedule WHERE recurring_id=%s FOR UPDATE", (recurring_id,))
+                if not c.fetchone():
+                    return jsonify(error="ไม่พบสายประจำ"), 404
+            c.execute("SELECT 1 FROM driver d JOIN app_user u USING(user_id) WHERE driver_id=%s AND u.is_active AND u.role='driver'", (data["driver_id"],))
+            if not c.fetchone():
+                return jsonify(error="กรุณาเลือกคนขับที่มีบัญชีใช้งานอยู่"), 400
+            c.execute("SELECT * FROM vehicle WHERE license_plate=%s FOR UPDATE", (data["license_plate"],))
+            vehicle = c.fetchone()
+            if vehicle and (vehicle["vehicle_type"] != data["vehicle_type"] or vehicle["total_seats"] != data["total_seats"]):
+                return jsonify(error="ทะเบียนนี้มีประเภทรถต่างจากที่เลือก กรุณาใช้ข้อมูลรถเดิมหรือทะเบียนใหม่"), 409
+            if not vehicle:
+                c.execute("INSERT INTO vehicle(vehicle_type,license_plate,total_seats) VALUES(%s,%s,%s) RETURNING *",
+                          (data["vehicle_type"], data["license_plate"], data["total_seats"]))
+                vehicle = c.fetchone()
+                for number in range(1, data["total_seats"] + 1):
+                    c.execute("INSERT INTO seat(vehicle_id,seat_number) VALUES(%s,%s)", (vehicle["vehicle_id"], str(number)))
+            c.execute("INSERT INTO route(origin,destination) VALUES('กรุงเทพฯ',%s) ON CONFLICT(origin,destination) DO UPDATE SET destination=EXCLUDED.destination RETURNING route_id", (data["destination"],))
+            route_id = c.fetchone()["route_id"]
+            values = (route_id, data["driver_id"], vehicle["vehicle_id"], data["departure_time"],
+                      data["start_date"], data["duration_minutes"], data["fare"], json.dumps(data["drop_off_points"]), data["enabled"])
+            if recurring_id is None:
+                c.execute("""INSERT INTO recurring_schedule(route_id,driver_id,vehicle_id,departure_time,start_date,duration_minutes,fare,drop_off_points,enabled,created_by)
+                    VALUES(%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s) RETURNING recurring_id""", (*values, uid()))
+                recurring_id = c.fetchone()["recurring_id"]
+            else:
+                c.execute("""UPDATE recurring_schedule SET route_id=%s,driver_id=%s,vehicle_id=%s,departure_time=%s,start_date=%s,
+                    duration_minutes=%s,fare=%s,drop_off_points=%s::jsonb,enabled=%s,updated_at=NOW() WHERE recurring_id=%s""", (*values, recurring_id))
+            audit("recurring.save", "recurring_schedule", recurring_id, body())
+            created = generate_daily_trips(con)
+        con.commit()
+        return jsonify(recurring_id=recurring_id, created=created), 201 if request.method == "POST" else 200
+    except psycopg.errors.UniqueViolation:
+        con.rollback()
+        return jsonify(error="ทะเบียนรถนี้มีสายประจำในเวลาเดียวกันแล้ว"), 409
+
+
 @app.get("/api/bookings")
 @require()
 def bookings():
@@ -1229,6 +1165,7 @@ def create_booking():
     try:
         with con.transaction():
             with con.cursor() as c:
+                lock_generation(c)
                 c.execute(
                     "SELECT passenger_id FROM passenger WHERE user_id=%s", (uid(),)
                 )
@@ -1236,7 +1173,7 @@ def create_booking():
                 if not p:
                     return jsonify(error="ไม่พบข้อมูลผู้โดยสาร"), 400
                 c.execute(
-                    "SELECT t.schedule_id,t.fare,t.trip_status,t.drop_off_points,r.destination,v.total_seats,s.active_status,s.departure_time FROM trip t JOIN route r USING(route_id) JOIN vehicle v USING(vehicle_id) JOIN schedule s USING(schedule_id) WHERE t.trip_id=%s FOR UPDATE",
+                    "SELECT t.schedule_id,t.fare,t.trip_status,t.drop_off_points,t.current_stop,r.destination,v.total_seats,s.active_status,s.departure_time FROM trip t JOIN route r USING(route_id) JOIN vehicle v USING(vehicle_id) JOIN schedule s USING(schedule_id) WHERE t.trip_id=%s FOR UPDATE",
                     (trip_id,),
                 )
                 t = c.fetchone()
@@ -1356,6 +1293,8 @@ def board(booking_id):
             (booking_id,),
         )
         b = c.fetchone()
+        if not b:
+            return jsonify(error="ตั๋วยังไม่ชำระเงิน หรือเช็กอินแล้ว"), 409
         c.execute(
             "UPDATE ticket SET ticket_status='boarded',scanned_at=NOW() WHERE booking_id=%s",
             (booking_id,),
@@ -1458,29 +1397,47 @@ def ticket_qr(ticket_id):
 @app.post("/api/scan")
 @require("driver")
 def scan():
-    d = body()
-    raw = d.get("qr_payload") or d.get("qr_code")
+    raw = body().get("qr_payload") or body().get("qr_code")
     code = raw.get("qr_code") if isinstance(raw, dict) else raw
     if isinstance(code, str) and code.lstrip().startswith("{"):
         try:
-            code = json.loads(code).get("qr_code")
+            payload = json.loads(code)
+            code = payload.get("qr_code") if isinstance(payload, dict) else None
         except json.JSONDecodeError:
-            pass
+            code = None
+    if not isinstance(code, str) or not code.strip() or len(code) > 255:
+        return jsonify(valid=False, error="รหัสตั๋วไม่ถูกต้อง"), 400
     with db().cursor() as c:
         c.execute(
-            "SELECT t.*,b.booking_status,b.seat_number,b.trip_id,pm.payment_status,r.destination,v.license_plate,s.departure_time FROM ticket t JOIN booking b USING(booking_id) JOIN payment pm USING(booking_id) JOIN trip tr ON tr.trip_id=b.trip_id JOIN route r ON r.route_id=tr.route_id JOIN vehicle v ON v.vehicle_id=tr.vehicle_id JOIN schedule s ON s.schedule_id=tr.schedule_id WHERE t.qr_code=%s",
-            (code,),
-        )
-        t = c.fetchone()
-    if not t:
-        return jsonify(valid=False, status="ไม่พบตั๋ว"), 404
-    if not can_manage_trip(t["trip_id"], current_user()):
-        return jsonify(valid=False, status="ตั๋วไม่ได้อยู่ในความรับผิดชอบของคุณ"), 403
-    return jsonify(
-        valid=t["booking_status"] in ("paid", "boarded"),
-        ticket=t,
-        payment_status=t["booking_status"],
-    )
+            """SELECT t.*,b.booking_status,b.seat_number,b.trip_id,pm.payment_status,
+                r.destination,v.license_plate,s.departure_time,s.arrive_time,s.active_status,tr.trip_status
+                FROM ticket t JOIN booking b USING(booking_id) JOIN payment pm USING(booking_id)
+                JOIN trip tr ON tr.trip_id=b.trip_id JOIN route r ON r.route_id=tr.route_id
+                JOIN vehicle v ON v.vehicle_id=tr.vehicle_id JOIN schedule s ON s.schedule_id=tr.schedule_id
+                WHERE t.qr_code=%s FOR UPDATE OF tr,b,t""", (code.strip(),))
+        ticket = c.fetchone()
+        if not ticket:
+            return jsonify(valid=False, error="ไม่พบตั๋ว"), 404
+        if not can_manage_trip(ticket["trip_id"], current_user()):
+            return jsonify(valid=False, error="ตั๋วไม่ได้อยู่ในความรับผิดชอบของคุณ"), 403
+        if ticket["payment_status"] != "success" or ticket["booking_status"] not in ("paid", "boarded"):
+            return jsonify(valid=False, error="ตั๋วยังไม่ชำระเงิน ถูกยกเลิก หรือใช้เดินทางแล้ว"), 409
+        already = ticket["booking_status"] == "boarded"
+        if not already:
+            if (not ticket["active_status"] or ticket["trip_status"] not in ("waiting", "departed", "travelling")
+                or ticket["departure_time"].astimezone(BANGKOK).date() != now().astimezone(BANGKOK).date()
+                or (ticket["arrive_time"] and ticket["arrive_time"] <= now())):
+                return jsonify(valid=False, error="ตั๋วไม่ใช่เที่ยวรถวันนี้ หรือเที่ยวรถปิดเช็กอินแล้ว"), 409
+            c.execute("UPDATE booking SET booking_status='boarded' WHERE booking_id=%s", (ticket["booking_id"],))
+            c.execute("UPDATE ticket SET ticket_status='boarded',scanned_at=NOW() WHERE ticket_id=%s RETURNING scanned_at",
+                      (ticket["ticket_id"],))
+            ticket["scanned_at"] = c.fetchone()["scanned_at"]
+            ticket["ticket_status"] = "boarded"
+            ticket["booking_status"] = "boarded"
+            audit("ticket.scan_check_in", "ticket", ticket["ticket_id"], {"booking_id": ticket["booking_id"]})
+        db().commit()
+        return jsonify(valid=True, status="boarded", already_checked_in=already,
+                       ticket=ticket, payment_status=ticket["payment_status"])
 
 
 @app.patch("/api/trips/<int:trip_id>/location")
@@ -1531,6 +1488,8 @@ def trip_status(trip_id):
 def trip_time(trip_id):
     d = body()
     with db().cursor() as c:
+        lock_generation(c)
+        c.execute("UPDATE trip SET schedule_override=TRUE WHERE trip_id=%s", (trip_id,))
         c.execute(
             "UPDATE schedule SET departure_time=COALESCE(%s,departure_time),arrive_time=COALESCE(%s,arrive_time) WHERE schedule_id=(SELECT schedule_id FROM trip WHERE trip_id=%s) RETURNING *",
             (d.get("departure_time"), d.get("arrive_time"), trip_id),
@@ -1607,7 +1566,7 @@ def complete_trip(trip_id):
 
 
 @app.get("/api/reports/daily")
-@require("accountant", "staff", "admin")
+@require("accountant", "staff", "dispatcher", "admin")
 def report():
     with db().cursor() as c:
         c.execute(

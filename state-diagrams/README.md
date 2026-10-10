@@ -1,0 +1,11 @@
+# State diagrams
+
+- `scan-ticket-and-check-in.mmd`: new diagram. `POST /api/scan` now changes a paid booking directly to boarded and saves `scanned_at` in one transaction. Repeat scans return `already_checked_in`; failed validation leaves records unchanged.
+- `manage-bus-schedules.mmd`: changed. Includes persistent daily routes, a background scheduler, a rolling seven-day Bangkok date window, pause/resume, unique route/date occurrences, and protection for booked or manually adjusted trips.
+- `view-e-ticket-and-payment-status.mmd`: updated to follow actual booking, payment and travel states. Pending unpaid bookings have no ticket yet; successful Demo payment creates a database ticket and receipt. My Tickets polls booking status every five seconds and reflects check-in, alighting, completion, cancellation and schedule changes. Scan time is stored on the ticket and returned by the scan endpoint; the My Tickets booking response currently does not expose `scanned_at`.
+
+Authentication now uses server-validated username/password directly. The fake OTP screen and offline demo login/data fallback have been removed. API/database errors are shown instead of creating substitute records.
+
+Daily route edits apply to future waiting trips without active bookings or a manual time override. Pausing preserves protected trips; resuming reactivates the same occurrence IDs. A scheduler checks every 30 seconds, and API maintenance also runs generation as a recovery path. Neither creates past departures.
+
+The diagrams retain the original simple page-flow style. Schedule management is grouped into three composite frames: Add Bus Schedule, Edit Bus Schedule Time and Manage Daily Route. The ticket view keeps its E-Ticket found and E-Ticket not found frames. Background generation, protected trips and scan behavior are summarized in notes instead of separate worker or transaction states. Both updated diagrams use the same trip/schedule records, booking states (`pending`, `paid`, `boarded`, `alighted`, `completed`, `cancelled`) and payment states (`unpaid`, `success`, `cancelled`) as the API and scanner diagram. Failed API requests are errors, not an invented `failed` payment state. Configured manager accounts are `staff` and `admin`; the API still permits `dispatcher` without requiring a dispatcher account.

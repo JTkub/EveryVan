@@ -54,3 +54,22 @@ CREATE INDEX IF NOT EXISTS idx_notification_user ON notification(user_id, is_rea
 CREATE INDEX IF NOT EXISTS idx_auth_session_user ON auth_session(user_id);
 CREATE INDEX IF NOT EXISTS idx_auth_session_expiry ON auth_session(expires_at);
 CREATE INDEX IF NOT EXISTS idx_app_user_role_active ON app_user(role, is_active);
+CREATE TABLE IF NOT EXISTS recurring_schedule (
+  recurring_id SERIAL PRIMARY KEY,
+  route_id INT NOT NULL REFERENCES route(route_id),
+  driver_id INT NOT NULL REFERENCES driver(driver_id),
+  vehicle_id INT NOT NULL REFERENCES vehicle(vehicle_id),
+  departure_time TIME NOT NULL,
+  start_date DATE NOT NULL,
+  duration_minutes INT NOT NULL DEFAULT 120 CHECK(duration_minutes BETWEEN 1 AND 1440),
+  fare NUMERIC(10,2) NOT NULL CHECK(fare >= 0),
+  drop_off_points JSONB NOT NULL DEFAULT '[]'::jsonb,
+  enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  created_by INT REFERENCES app_user(user_id),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(vehicle_id,departure_time)
+);
+ALTER TABLE trip ADD COLUMN IF NOT EXISTS recurring_id INT REFERENCES recurring_schedule(recurring_id);
+ALTER TABLE trip ADD COLUMN IF NOT EXISTS service_date DATE;
+ALTER TABLE trip ADD COLUMN IF NOT EXISTS schedule_override BOOLEAN NOT NULL DEFAULT FALSE;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_recurring_service_date ON trip(recurring_id,service_date) WHERE recurring_id IS NOT NULL;

@@ -34,6 +34,27 @@ export interface Van {
   date?: string;
   currentStop?: string;
   currentStopUpdatedAt?: string;
+  recurringId?: number;
+  scheduleOverride?: boolean;
+}
+
+export interface RecurringScheduleInput {
+  destination: string;
+  drop_off_points: string[];
+  departure_time: string;
+  start_date: string;
+  duration_minutes: number;
+  vehicle_type: string;
+  license_plate: string;
+  total_seats: number;
+  driver_id: number;
+  price: number;
+  enabled: boolean;
+}
+
+export interface RecurringSchedule extends RecurringScheduleInput {
+  recurring_id: number;
+  driver_name: string;
 }
 
 export interface TravelFollower {

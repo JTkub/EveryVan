@@ -1,0 +1,71 @@
+stateDiagram-v2
+    direction TB
+
+    [*] --> LoadingTickets : Passenger opens My Tickets
+
+    state "Loading bookings, tickets, and payments" as LoadingTickets
+    state "Mapping API response to Booking data" as MappingBookings
+    state "Unable to load tickets" as LoadError
+    state "No bookings found" as EmptyTickets
+    state "Checking payment status" as CheckingPayment
+    state PaymentResult <<choice>>
+    state "Showing pending-payment notice" as PendingDisplayed
+    state "Showing cancelled booking" as CancelledDisplayed
+    state "Checking E-Ticket" as CheckingTicket
+    state TicketAvailability <<choice>>
+
+    LoadingTickets --> MappingBookings : GET /api/bookings succeeds
+    LoadingTickets --> LoadError : API request fails
+    LoadError --> LoadingTickets : Retry
+    MappingBookings --> EmptyTickets : No passenger bookings
+    MappingBookings --> CheckingPayment : Keep current passenger records
+    CheckingPayment --> PaymentResult
+
+    PaymentResult --> PendingDisplayed : payment unpaid
+    PaymentResult --> CancelledDisplayed : booking cancelled
+    PaymentResult --> CheckingTicket : payment successful
+
+    PendingDisplayed --> LoadingTickets : Payment completed, booking expires or refresh
+    CancelledDisplayed --> ViewCompleted
+    EmptyTickets --> ViewCompleted
+    CheckingTicket --> TicketAvailability
+
+    TicketAvailability --> TicketFound : E-Ticket found
+    TicketAvailability --> TicketNotFound : E-Ticket not found
+
+    state "E-Ticket found" as TicketFound {
+        [*] --> RenderingQR
+
+        state "Rendering QRCodeSVG" as RenderingQR
+        state "Showing E-Ticket, booking status and receipt" as TicketDisplayed
+
+        RenderingQR --> TicketDisplayed : Show route, time, seat, driver and amount
+        TicketDisplayed --> [*]
+    }
+
+    state "E-Ticket not found" as TicketNotFound {
+        [*] --> TicketUnavailableDisplayed
+
+        state "Showing E-Ticket unavailable" as TicketUnavailableDisplayed
+
+        TicketUnavailableDisplayed --> [*]
+    }
+
+    TicketFound --> LoadingTickets : Refresh after check-in or schedule change
+    TicketFound --> ViewCompleted : Passenger finishes viewing
+    TicketNotFound --> LoadingTickets : Retry loading
+    TicketNotFound --> ViewCompleted : Passenger finishes viewing
+    PendingDisplayed --> ViewCompleted : Passenger leaves page
+    ViewCompleted --> [*]
+
+    note right of PendingDisplayed
+        Payment remains Demo.
+        Pay within 5 minutes to receive an E-Ticket.
+    end note
+
+    note right of TicketFound
+        Driver scanning changes paid to boarded immediately.
+        My Tickets refreshes every 5 seconds.
+        Show paid, boarded, alighted or completed status.
+        Cancelled or finished bookings cannot check in again.
+    end note

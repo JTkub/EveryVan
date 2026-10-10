@@ -4,13 +4,11 @@ import {
   BusFront,
   Eye,
   EyeOff,
-  ShieldCheck,
-  Smartphone,
 } from "lucide-react";
 import { useVan } from "../context/VanContext";
 
 export function AuthView() {
-  const { login, registerUser, pendingOtpUser, verifyOtp, cancelOtp } = useVan();
+  const { login, registerUser } = useVan();
   const [mode, setMode] = useState<"login" | "register">("login");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -53,80 +51,6 @@ export function AuthView() {
       setBusy(false);
     }
   };
-  const demo = (user: string) => {
-    setUsername(user);
-    setPassword(user);
-    setMode("login");
-    setError("");
-    setSuccess("");
-  };
-  const submitOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError("");
-    setBusy(true);
-    try {
-      await verifyOtp(password);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "ยืนยัน OTP ไม่สำเร็จ");
-    } finally {
-      setBusy(false);
-    }
-  };
-  const maskedPhone = pendingOtpUser?.profile.phone
-    ? pendingOtpUser.profile.phone.replace(/(\d{3})\d+(\d{3})$/, "$1••••$2")
-    : "เบอร์โทรศัพท์ของคุณ";
-  if (pendingOtpUser) {
-    return (
-      <div className="auth-shell">
-        <div className="auth-visual">
-          <div className="auth-brand">
-            <span className="brand-mark"><BusFront size={21} /></span>
-            <span className="auth-brand-name">Every<span>Van</span></span>
-          </div>
-          <div className="auth-copy">
-            <p className="eyebrow">ACCOUNT SECURITY</p>
-            <h1>ยืนยัน<br /><em>ตัวตนของคุณ</em></h1>
-            <p>อีกขั้นตอนเดียวก่อนเข้าสู่ระบบอย่างปลอดภัย</p>
-          </div>
-        </div>
-        <div className="auth-form-wrap">
-          <div className="auth-card otp-card">
-            <div className="otp-icon"><Smartphone size={28} /></div>
-            <div className="auth-card-head">
-              <p className="eyebrow accent">TWO-FACTOR AUTHENTICATION</p>
-              <h2>กรอกรหัส OTP</h2>
-              <p className="muted">ส่งรหัสยืนยันไปที่ {maskedPhone} แล้ว</p>
-            </div>
-            {error && <div className="auth-error" role="alert">{error}</div>}
-            <form onSubmit={submitOtp} className="auth-form">
-              <div className="field">
-                <label>รหัส OTP</label>
-                <input
-                  className="otp-input"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  autoComplete="one-time-code"
-                  autoFocus
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value.replace(/\D/g, ""))}
-                  placeholder="OTP 6 หลัก"
-                  required
-                />
-                <small className="field-hint">โหมดทดสอบ: ใช้ตัวเลขใดก็ได้</small>
-              </div>
-              <button className="btn primary auth-submit" disabled={busy}>
-                {busy ? "กำลังยืนยัน..." : "ยืนยันและเข้าสู่ระบบ"} <ArrowRight size={16} />
-              </button>
-              <button type="button" className="text-button otp-cancel" onClick={() => void cancelOtp()}>
-                กลับไปหน้าเข้าสู่ระบบ
-              </button>
-            </form>
-          </div>
-          <p className="auth-footer">© {new Date().getFullYear()} EveryVan · ระบบจองรถตู้ที่คุณไว้ใจ</p>
-        </div>
-      </div>
-    );
-  }
   return (
     <div className="auth-shell">
       <div className="auth-visual">
@@ -265,7 +189,7 @@ export function AuthView() {
               <input
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="เช่น pax"
+                placeholder="กรอกชื่อผู้ใช้ของคุณ"
                 autoComplete="username"
                 required
               />
@@ -302,32 +226,6 @@ export function AuthView() {
               <ArrowRight size={16} />
             </button>
           </form>
-          {mode === "login" && (
-            <div className="demo-login">
-              <div>
-                <ShieldCheck size={16} />
-                <span>บัญชีทดลอง</span>
-              </div>
-              <div className="demo-buttons">
-                <button type="button" onClick={() => demo("pax")}>
-                  ผู้โดยสาร
-                </button>
-                <button type="button" onClick={() => demo("driver")}>
-                  คนขับ
-                </button>
-                <button type="button" onClick={() => demo("staff")}>
-                  จัดคิวรถ
-                </button>
-                <button type="button" onClick={() => demo("accountant")}>
-                  ฝ่ายบัญชี
-                </button>
-                <button type="button" onClick={() => demo("admin")}>
-                  แอดมิน
-                </button>
-              </div>
-              <small>ใช้ชื่อผู้ใช้และรหัสผ่านเดียวกัน เช่น pax / pax</small>
-            </div>
-          )}
         </div>
         <p className="auth-footer">
           © {new Date().getFullYear()} EveryVan · ระบบจองรถตู้ที่คุณไว้ใจ

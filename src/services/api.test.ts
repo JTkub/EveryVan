@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-describe("API fallback policy", () => {
+describe("API requires the real server", () => {
   beforeEach(() => {
     localStorage.clear();
     vi.resetModules();
   });
 
-  it("uses visible offline data when PostgreSQL/API is unavailable", async () => {
+  it("reports an unavailable database without creating demo data", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
@@ -18,9 +18,16 @@ describe("API fallback policy", () => {
       ),
     );
     const { api, apiStatus } = await import("./api");
-    const vans = await api.vans.list();
-    expect(vans.length).toBeGreaterThan(0);
+    await expect(api.vans.list()).rejects.toThrow("database unavailable");
     expect(apiStatus.get()).toBe("offline");
+    expect(localStorage.length).toBe(0);
+  });
+
+  it("does not log in locally when the server cannot be reached", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Network error")));
+    const { api } = await import("./api");
+    await expect(api.auth.login("admin", "admin")).rejects.toThrow("ไม่สามารถเชื่อมต่อ API ได้");
+    expect(localStorage.getItem("everyvan_api_session")).toBeNull();
   });
 
   it("does not hide an unexpected server defect behind demo data", async () => {

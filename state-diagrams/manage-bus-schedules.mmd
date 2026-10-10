@@ -1,0 +1,87 @@
+stateDiagram-v2
+    direction TB
+
+    [*] --> LoadingDrivers : Manager opens schedule management
+
+    state "Loading driver options" as LoadingDrivers
+    state DriverLoadResult <<choice>>
+    state "Schedule form ready" as ScheduleReady
+    state "Unable to load drivers" as DriverLoadError
+    state ScheduleAction <<choice>>
+
+    LoadingDrivers --> DriverLoadResult : GET /api/drivers
+    DriverLoadResult --> ScheduleReady : drivers loaded
+    DriverLoadResult --> DriverLoadError : request failed
+    DriverLoadError --> LoadingDrivers : Retry
+    ScheduleReady --> ScheduleAction : Manager chooses an action
+
+    ScheduleAction --> AddSchedule : Add bus schedule
+    ScheduleAction --> EditSchedule : Edit departure or arrival time
+    ScheduleAction --> ManageDailyRoute : Add or edit daily route
+
+    state "Add Bus Schedule" as AddSchedule {
+        [*] --> EnteringTripData
+        state "Entering trip details" as EnteringTripData
+        state "Validating new trip data" as ValidatingTrip
+        state CreateValidation <<choice>>
+        state "Saving route and vehicle" as SavingRouteVehicle
+        state "Saving schedule and trip" as SavingScheduleTrip
+        state "Schedule created" as ScheduleCreated
+        state "Create validation error" as CreateError
+
+        EnteringTripData --> ValidatingTrip : Manager selects Save
+        ValidatingTrip --> CreateValidation : POST /api/trips
+        CreateValidation --> SavingRouteVehicle : valid trip data
+        CreateValidation --> CreateError : invalid or duplicate data
+        SavingRouteVehicle --> SavingScheduleTrip : Route and vehicle saved
+        SavingScheduleTrip --> ScheduleCreated : Save and refresh data
+        CreateError --> EnteringTripData : Correct form data
+        ScheduleCreated --> [*]
+    }
+
+    state "Edit Bus Schedule Time" as EditSchedule {
+        [*] --> EditingScheduleTime
+        state "Editing departure or arrival time" as EditingScheduleTime
+        state "Updating schedule" as UpdatingSchedule
+        state EditResult <<choice>>
+        state "Schedule time updated" as ScheduleUpdated
+        state "Schedule update error" as UpdateError
+
+        EditingScheduleTime --> UpdatingSchedule : Manager saves new time
+        UpdatingSchedule --> EditResult : PATCH /api/trips/ID/time
+        EditResult --> ScheduleUpdated : Save time and notify passengers
+        EditResult --> UpdateError : request rejected
+        UpdateError --> EditingScheduleTime : Correct time or retry
+        ScheduleUpdated --> [*]
+
+        note right of ScheduleUpdated
+            My Tickets displays the updated schedule.
+            Daily generation keeps manually adjusted trip times.
+        end note
+    }
+
+    state "Manage Daily Route" as ManageDailyRoute {
+        [*] --> EditingDailyRoute
+        state "Editing daily route settings" as EditingDailyRoute
+        state "Saving daily route" as SavingDailyRoute
+        state DailyRouteResult <<choice>>
+        state "Daily queue updated" as DailyQueueUpdated
+
+        EditingDailyRoute --> SavingDailyRoute : Save settings or pause/resume
+        SavingDailyRoute --> DailyRouteResult : POST or PUT /api/recurring-schedules
+        DailyRouteResult --> DailyQueueUpdated : valid settings saved
+        DailyRouteResult --> EditingDailyRoute : Correct rejected data or retry
+        DailyQueueUpdated --> [*]
+
+        note right of EditingDailyRoute
+            Generate daily trips automatically.
+            Manager can change settings or pause/resume.
+            Keep booked, started and manually adjusted trips.
+            Background generation continues with the page closed.
+        end note
+    }
+
+    AddSchedule --> ScheduleReady : Display new schedule
+    EditSchedule --> ScheduleReady : Display updated time
+    ManageDailyRoute --> ScheduleReady : Refresh daily routes and trips
+    ScheduleReady --> [*] : Manager leaves page

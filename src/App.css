@@ -1806,42 +1806,6 @@ td small {
   align-self: center;
   margin-top: 4px;
 }
-.demo-login {
-  border-top: 1px solid var(--line);
-  margin-top: 24px;
-  padding-top: 18px;
-}
-.demo-login > div:first-child {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--blue);
-  font-size: 11px;
-  font-weight: 700;
-}
-.demo-buttons {
-  display: flex;
-  gap: 7px;
-  margin: 12px 0 7px;
-}
-.demo-buttons button {
-  flex: 1;
-  border: 1px solid var(--line);
-  background: #f8faff;
-  color: var(--ink);
-  border-radius: 8px;
-  padding: 8px 4px;
-  font-size: 10px;
-  cursor: pointer;
-}
-.demo-buttons button:hover {
-  border-color: #a9c2f5;
-  color: var(--blue);
-}
-.demo-login small {
-  color: var(--muted);
-  font-size: 9px;
-}
 .auth-footer {
   text-align: center;
   color: #a0a9b7;
@@ -2366,10 +2330,6 @@ textarea:focus-visible {
   .action-buttons .btn {
     width: 100%;
   }
-  .demo-buttons {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-  }
   .auth-two {
     grid-template-columns: 1fr;
   }
@@ -2421,7 +2381,7 @@ textarea:focus-visible {
     align-self: stretch;
   }
 }
-.demo-mode-banner {
+.connection-banner {
   margin: 0 32px;
   padding: 10px 14px;
   border: 1px solid #f0c36a;
@@ -2476,8 +2436,6 @@ textarea:focus-visible {
 #root .alert,
 #root .auth-error,
 #root .auth-route,
-#root .demo-buttons button,
-#root .demo-login small,
 #root .auth-footer,
 #root .camera-placeholder span,
 #root .camera-live,
@@ -2621,7 +2579,7 @@ textarea:focus-visible {
   width: 100%;
 }
 
-.demo-mode-banner {
+.connection-banner {
   width: auto;
   max-width: calc(var(--page-max) - (var(--page-gutter) * 2));
   margin: 16px auto 0;
@@ -2683,16 +2641,6 @@ textarea:focus-visible {
   align-self: end;
 }
 
-.demo-buttons {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-}
-
-.demo-buttons button {
-  width: 100%;
-  min-width: 0;
-}
-
 @media (max-width: 1100px) {
   :root {
     --page-gutter: 28px;
@@ -2706,13 +2654,6 @@ textarea:focus-visible {
     padding: 26px;
   }
 
-  .demo-buttons {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
-  .demo-buttons button:nth-last-child(-n + 2) {
-    grid-column: span 1;
-  }
 }
 
 @media (max-width: 800px) {
@@ -2726,7 +2667,7 @@ textarea:focus-visible {
     padding: 22px var(--page-gutter) 44px;
   }
 
-  .demo-mode-banner {
+  .connection-banner {
     max-width: none;
     margin: 12px var(--page-gutter) 0;
   }
@@ -2774,16 +2715,7 @@ textarea:focus-visible {
     margin-top: 14px;
   }
 
-  .demo-buttons {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .demo-buttons button:last-child:nth-child(odd) {
-    grid-column: 1 / -1;
-  }
-
-  .auth-tabs button,
-  .demo-buttons button {
+  .auth-tabs button {
     min-height: 44px;
   }
 
@@ -2863,10 +2795,6 @@ textarea:focus-visible {
     width: 100%;
   }
 
-  .demo-login {
-    margin-top: 20px;
-    padding-top: 16px;
-  }
 }
 
 /* Admin account management */
@@ -3309,4 +3237,18 @@ textarea:focus-visible {
   .profile-password-form .form-actions .btn {
     width: 100%;
   }
+}
+.recurring-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--border, #e4e9ef);
+}
+.recurring-row p { margin: 6px 0; }
+.recurring-enabled { display: flex; align-items: center; gap: 8px; margin-top: 16px; }
+.recurring-enabled input { width: auto; }
+@media (max-width: 600px) {
+  .recurring-row { align-items: flex-start; flex-direction: column; }
 }

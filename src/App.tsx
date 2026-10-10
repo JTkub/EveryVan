@@ -32,6 +32,7 @@ import type {
   ManagedUser,
 } from "./types/domain";
 import { AuthView } from "./view/AuthView";
+import { RecurringSchedules } from "./view/RecurringSchedules";
 import { QRCodeSVG } from "qrcode.react";
 import {
   bangkokDateInput,
@@ -2328,8 +2329,8 @@ function DashboardContent() {
       <main className="main-new">
         <Topbar title={title} openMenu={() => setMobileOpen(true)} />
         {dataMode === "offline" && (
-          <div className="demo-mode-banner" role="status">
-            โหมดข้อมูลจำลอง — API หรือ PostgreSQL ยังไม่พร้อม ข้อมูลชุดนี้เก็บเฉพาะในเบราว์เซอร์
+          <div className="connection-banner" role="alert">
+            ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้ กรุณาตรวจสอบการเชื่อมต่อแล้วลองใหม่
           </div>
         )}
         <div className="content-new">{content}</div>
@@ -2619,7 +2620,9 @@ function CreateTripPage() {
           <p className="muted">กำหนดรถ คนขับ ปลายทาง และเวลาออกเดินทาง</p>
         </div>
       </div>
+      <RecurringSchedules />
       <form className="card-panel trip-form" onSubmit={submit}>
+        <h3>เพิ่มเที่ยวรถเฉพาะวัน</h3>
         {error && <div className="alert error">{error}</div>}
         {message && <div className="scan-result valid">{message}</div>}
         <div className="form-grid">
@@ -2721,10 +2724,12 @@ function CreateTripPage() {
   );
 }
 function ScannerPage() {
+  const { refreshDatabase } = useVan();
   const [value, setValue] = useState("");
   const [result, setResult] = useState<{
     valid: boolean;
     payment_status: string;
+    already_checked_in: boolean;
     ticket?: { seat_number?: string };
   } | null>(null);
   const [error, setError] = useState("");
@@ -2766,6 +2771,7 @@ function ScannerPage() {
     setResult(null);
     try {
       setResult(await api.scanner.scan(normalizedCode));
+      await refreshDatabase();
     } catch (e) {
       setError(e instanceof Error ? e.message : "ตรวจสอบ QR ไม่สำเร็จ");
     } finally {
@@ -2871,7 +2877,7 @@ function ScannerPage() {
           <p className="eyebrow accent">TICKET VALIDATION</p>
           <h2>สแกน QR ตั๋วด้วยกล้อง</h2>
           <p className="muted">
-            หันกล้องไปที่ QR บนตั๋ว ระบบจะอ่านและตรวจสอบให้อัตโนมัติ
+            หันกล้องไปที่ QR บนตั๋ว ระบบตรวจสอบและเช็กอินขึ้นรถให้อัตโนมัติ
           </p>
         </div>
         <span className="live-tag">
@@ -2946,9 +2952,9 @@ function ScannerPage() {
             aria-live="polite"
           >
             <strong>
-              {result.valid ? "✓ ตั๋วถูกต้อง" : "✕ ตั๋วใช้ไม่ได้"}
+              {result.valid ? (result.already_checked_in ? "✓ ตั๋วนี้เช็กอินแล้ว" : "✓ เช็กอินขึ้นรถสำเร็จ") : "✕ ตั๋วใช้ไม่ได้"}
             </strong>
-            <span>สถานะการชำระเงิน: {result.payment_status}</span>
+            <span>สถานะการชำระเงิน: {result.payment_status === "success" ? "ชำระแล้ว" : result.payment_status}</span>
             <span>ที่นั่ง: {result.ticket?.seat_number || "-"}</span>
           </div>
         )}
@@ -2971,7 +2977,7 @@ function ScannerPage() {
                 void check();
               }}
             >
-              {checking ? "กำลังตรวจสอบ..." : "ตรวจสอบรหัส"}
+              {checking ? "กำลังเช็กอิน..." : "เช็กอินด้วยรหัสตั๋ว"}
             </button>
           </div>
         </details>

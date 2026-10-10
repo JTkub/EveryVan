@@ -29,17 +29,13 @@ export const BOARDING_POINTS = [
   "สถานีขนส่งผู้โดยสารสายใต้ใหม่ (Southern Bus Terminal)",
   "จุดจอดรถตู้รังสิต (Rangsit)",
 ];
-const OTP_VERIFIED_SESSION_KEY = "everyvan_otp_verified_token";
 
 interface VanContextType {
   // Session Auth State
   currentUser: SessionUser | null;
-  pendingOtpUser: SessionUser | null;
   token: string | null;
   dataMode: DataMode;
   login: (username: string, password: string) => Promise<void>;
-  verifyOtp: (code: string) => Promise<void>;
-  cancelOtp: () => Promise<void>;
   logout: () => Promise<void>;
   registerUser: (
     username: string,
@@ -103,7 +99,7 @@ interface VanContextType {
   alightPassenger: (bookingId: string) => Promise<boolean>;
   alightPassengersAtStop: (vanId: string, stop: string) => Promise<number>;
   completeTrip: (vanId: string) => Promise<void>;
-  fastForwardTime: (minutes: number) => void;
+  refreshDatabase: () => Promise<void>;
 }
 
 const VanContext = createContext<VanContextType | undefined>(undefined);
@@ -112,7 +108,6 @@ export const VanProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
   const [currentUser, setCurrentUser] = useState<SessionUser | null>(null);
-  const [pendingOtpUser, setPendingOtpUser] = useState<SessionUser | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [dataMode, setDataMode] = useState<DataMode>(apiStatus.get());
 
@@ -204,54 +199,20 @@ export const VanProvider: React.FC<{ children: React.ReactNode }> = ({
       const session = await api.auth.getSession();
       if (session) {
         setToken(session.token);
-        if (sessionStorage.getItem(OTP_VERIFIED_SESSION_KEY) === session.token) {
-          setCurrentUser(session.user);
-          setNotifications(loadLocalNotifications(session.user.username));
-          await refreshDatabase(session.user.role);
-        } else {
-          setPendingOtpUser(session.user);
-        }
+        setCurrentUser(session.user);
+        setNotifications(loadLocalNotifications(session.user.username));
+        await refreshDatabase(session.user.role);
       } else {
         await refreshDatabase();
       }
     };
-    checkSession();
+    checkSession().catch(() => refreshDatabase());
   }, []);
 
   useEffect(() => {
     if (!currentUser) return;
     // Poll frequently so released seats are reflected for every open client.
     const interval = setInterval(refreshDatabase, 5000);
-    return () => clearInterval(interval);
-  }, [currentUser]);
-
-  // Expiry checks: runs auto-cancel cleaner locally (synced via API wrapper calls)
-  useEffect(() => {
-    if (!currentUser) return;
-    const interval = setInterval(async () => {
-      try {
-        const now = Date.now();
-        let updated = false;
-        const activeBookings = await api.bookings.list();
-        for (const b of activeBookings) {
-          if (b.status === "Pending Payment" && now > b.unpaidExpiresAt) {
-            await api.bookings.cancel(b.id);
-            updated = true;
-          }
-        }
-
-        if (updated) {
-          await refreshDatabase();
-          addNotification(
-            "การจองตั๋วบางรายการถูกยกเลิกโดยอัตโนมัติเนื่องจากไม่ได้รับการชำระเงินภายใน 5 นาที",
-            "payment_status",
-          );
-        }
-      } catch (err) {
-        console.error("Failed to check booking expiry", err);
-      }
-    }, 10000);
-
     return () => clearInterval(interval);
   }, [currentUser]);
 
@@ -280,38 +241,20 @@ export const VanProvider: React.FC<{ children: React.ReactNode }> = ({
   // Auth Operations
   const login = async (username: string, password: string) => {
     const res = await api.auth.login(username, password);
-    sessionStorage.removeItem(OTP_VERIFIED_SESSION_KEY);
     setToken(res.token);
-    setPendingOtpUser(res.user);
-  };
-
-  const verifyOtp = async (code: string) => {
-    if (!pendingOtpUser) throw new Error("ไม่พบรายการยืนยันตัวตน");
-    if (!/^\d+$/.test(code)) throw new Error("กรุณากรอกรหัส OTP เป็นตัวเลข");
-    if (token) sessionStorage.setItem(OTP_VERIFIED_SESSION_KEY, token);
-    setCurrentUser(pendingOtpUser);
-    setNotifications(loadLocalNotifications(pendingOtpUser.username));
-    await refreshDatabase(pendingOtpUser.role);
-    addNotification(
-      `ยืนยัน OTP และเข้าสู่ระบบในชื่อคุณ ${pendingOtpUser.profile.name} สำเร็จ`,
-      "payment_status",
-    );
-    setPendingOtpUser(null);
-  };
-
-  const cancelOtp = async () => {
-    await api.auth.logout();
-    sessionStorage.removeItem(OTP_VERIFIED_SESSION_KEY);
-    setToken(null);
-    setPendingOtpUser(null);
+    setCurrentUser(res.user);
+    setNotifications(loadLocalNotifications(res.user.username));
+    await refreshDatabase(res.user.role);
   };
 
   const logout = async () => {
     await api.auth.logout();
-    sessionStorage.removeItem(OTP_VERIFIED_SESSION_KEY);
     setToken(null);
     setCurrentUser(null);
-    setPendingOtpUser(null);
+    setVans([]);
+    setDrivers([]);
+    setBookings([]);
+    setTransactions([]);
     setNotifications([]);
   };
 
@@ -361,17 +304,8 @@ export const VanProvider: React.FC<{ children: React.ReactNode }> = ({
       boardingPoint,
       dropOffPoint,
       date,
-      currentUser.profile,
     );
     await refreshDatabase();
-
-    const van = vans.find((v) => v.id === vanId);
-    setTimeout(() => {
-      addNotification(
-        `รถตู้สาย ${van?.destination} ใกล้ถึงเวลาออกเดินทางแล้ว! จุดขึ้นรถ: ${boardingPoint}`,
-        "departure",
-      );
-    }, 15000);
 
     return newBooking;
   };
@@ -493,7 +427,6 @@ export const VanProvider: React.FC<{ children: React.ReactNode }> = ({
       bookingId,
       rating,
       comment,
-      currentUser.profile.name,
     );
     await refreshDatabase();
     addNotification("ส่งข้อมูลรีวิวและให้คะแนนเสร็จสิ้น", "payment_status");
@@ -554,37 +487,13 @@ export const VanProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
-  const fastForwardTime = (minutes: number) => {
-    // Fast forward LocalStorage timers for testing timeout
-    const msToSubtract = minutes * 60 * 1000;
-    const bList = JSON.parse(localStorage.getItem("everyvan_bookings") || "[]");
-    const updated = bList.map((b: Booking) => {
-      if (b.status === "Pending Payment") {
-        return {
-          ...b,
-          unpaidExpiresAt: b.unpaidExpiresAt - msToSubtract,
-        };
-      }
-      return b;
-    });
-    localStorage.setItem("everyvan_bookings", JSON.stringify(updated));
-    refreshDatabase();
-    addNotification(
-      `เร่งเวลาจำลองไปข้างหน้า ${minutes} นาที`,
-      "payment_status",
-    );
-  };
-
   return (
     <VanContext.Provider
       value={{
         currentUser,
-        pendingOtpUser,
         token,
         dataMode,
         login,
-        verifyOtp,
-        cancelOtp,
         logout,
         registerUser,
         updateUserProfile,
@@ -610,7 +519,7 @@ export const VanProvider: React.FC<{ children: React.ReactNode }> = ({
         alightPassenger,
         alightPassengersAtStop,
         completeTrip,
-        fastForwardTime,
+        refreshDatabase,
       }}
     >
       {children}
