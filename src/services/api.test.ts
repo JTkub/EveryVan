@@ -7,6 +7,16 @@ describe("API requires the real server", () => {
     vi.resetModules();
   });
 
+  it("keeps both pickup and drop-off from the booking response for ticket and driver views", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ bookings: [{
+      booking_id: 1, trip_id: 2, seat_number: "3", boarding_point: "บางนา",
+      alighting_point: "พัทยา", booking_status: "paid",
+    }] }), { status: 200, headers: { "Content-Type": "application/json" } })));
+    const { api } = await import("./api");
+    const [booking] = await api.bookings.list();
+    expect(booking).toMatchObject({ boardingPoint: "บางนา", dropOffPoint: "พัทยา", seatNo: 3, status: "Paid" });
+  });
+
   it("reports an unavailable database without creating demo data", async () => {
     vi.stubGlobal(
       "fetch",

@@ -74,7 +74,7 @@ class RuntimeTests(unittest.TestCase):
         return result.json["trip"]["trip_id"]
 
     def paid_ticket(self, trip_id):
-        result = self.call("POST", "/bookings", "passenger", dict(trip_id=trip_id, seat_number=1, boarding_point="Bangkok", alighting_point="Stop A"))
+        result = self.call("POST", "/bookings", "passenger", dict(trip_id=trip_id, seat_number=1, boarding_point="กรุงเทพฯ", alighting_point="Stop A"))
         self.assertEqual(result.status_code, 201, result.json)
         booking_id = result.json["booking"]["booking_id"]
         result = self.call("POST", f"/bookings/{booking_id}/pay", "passenger", {})
@@ -135,6 +135,51 @@ class RuntimeTests(unittest.TestCase):
         _, future_code = self.paid_ticket(self.trip(datetime.now(self.api.BANGKOK) + timedelta(days=1)))
         self.assertEqual(self.call("POST", "/scan", "driver", {"qr_code": future_code}).status_code, 409)
         self.assertIsNone(self.query("SELECT scanned_at FROM ticket WHERE booking_id=%s", (booking_id,))[0]["scanned_at"])
+
+    def test_shared_stops_validate_route_order_before_departure(self):
+        trip_id = self.trip()
+        for pickup, drop_off in (("Stop A", "Stop A"), ("Stop B", "Stop A"), ("Test destination", "Stop B"), ("Unknown", "Stop A")):
+            response = self.call("POST", "/bookings", "passenger", dict(trip_id=trip_id, seat_number=2, boarding_point=pickup, alighting_point=drop_off))
+            self.assertEqual(response.status_code, 400, response.json)
+        response = self.call("POST", "/bookings", "passenger", dict(trip_id=trip_id, seat_number=2, boarding_point="Stop A", alighting_point="Test destination"))
+        self.assertEqual(response.status_code, 201, response.json)
+        rows = self.call("GET", "/bookings", "passenger").json["bookings"]
+        self.assertEqual(rows[0]["boarding_point"], "Stop A")
+        self.assertEqual(rows[0]["alighting_point"], "Test destination")
+
+    def test_mid_route_alighting_releases_seat_for_pickup_at_same_stop(self):
+        trip_id = self.trip()
+        booking_id, old_code = self.paid_ticket(trip_id)
+        self.assertEqual(self.call("POST", "/scan", "driver", {"qr_code": old_code}).status_code, 200)
+        self.assertEqual(self.call("PATCH", f"/trips/{trip_id}/status", "driver", {"status": "departed"}).status_code, 200)
+        self.assertEqual(self.call("PATCH", f"/trips/{trip_id}/location", "driver", {"current_stop": "Stop A"}).status_code, 200)
+        booking = dict(trip_id=trip_id, seat_number=1, boarding_point="Stop A", alighting_point="Stop B")
+        self.assertEqual(self.call("POST", "/bookings", "passenger", booking).status_code, 409)
+        released = self.call("POST", f"/trips/{trip_id}/alight-stop", "driver", {"alighting_point": "Stop A"})
+        self.assertEqual(released.json["count"], 1)
+        self.assertEqual(self.query("SELECT booking_status FROM booking WHERE booking_id=%s", (booking_id,))[0]["booking_status"], "alighted")
+        self.assertEqual(self.call("POST", "/scan", "driver", {"qr_code": old_code}).status_code, 409)
+        created = self.call("POST", "/bookings", "passenger", booking)
+        self.assertEqual(created.status_code, 201, created.json)
+        new_booking_id = created.json["booking"]["booking_id"]
+        paid = self.call("POST", f"/bookings/{new_booking_id}/pay", "passenger", {})
+        self.assertEqual(paid.status_code, 200, paid.json)
+        self.assertEqual(self.call("POST", "/scan", "driver", {"qr_code": paid.json["ticket"]["qr_code"]}).status_code, 200)
+        # Future pickups are also bookable, rather than only the next stop.
+        future = {**booking, "seat_number": 2, "boarding_point": "Stop B", "alighting_point": "Test destination"}
+        self.assertEqual(self.call("POST", "/bookings", "passenger", future).status_code, 201)
+
+    def test_passed_stops_and_backward_location_updates_are_rejected(self):
+        trip_id = self.trip()
+        self.call("PATCH", f"/trips/{trip_id}/status", "driver", {"status": "travelling"})
+        self.call("PATCH", f"/trips/{trip_id}/location", "driver", {"current_stop": "Stop B"})
+        for pickup in ("Stop A", "กรุงเทพฯ"):
+            booking = dict(trip_id=trip_id, seat_number=1, boarding_point=pickup, alighting_point="Test destination")
+            self.assertEqual(self.call("POST", "/bookings", "passenger", booking).status_code, 409)
+        self.assertEqual(self.call("PATCH", f"/trips/{trip_id}/location", "driver", {"current_stop": "Stop A"}).status_code, 409)
+        self.assertEqual(self.call("PATCH", f"/trips/{trip_id}/location", "driver", {"current_stop": "Unknown"}).status_code, 400)
+        response = self.call("POST", "/bookings", "passenger", dict(trip_id=trip_id, seat_number=1, boarding_point="Stop B", alighting_point="Test destination"))
+        self.assertEqual(response.status_code, 201, response.json)
 
     def test_daily_generation_is_concurrent_safe_and_rolls_over_bangkok_midnight(self):
         data = self.template()

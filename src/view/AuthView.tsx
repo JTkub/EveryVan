@@ -4,11 +4,12 @@ import {
   BusFront,
   Eye,
   EyeOff,
+  Smartphone,
 } from "lucide-react";
 import { useVan } from "../context/VanContext";
 
 export function AuthView() {
-  const { login, registerUser } = useVan();
+  const { login, registerUser, pendingOtpUser, verifyOtp, cancelOtp } = useVan();
   const [mode, setMode] = useState<"login" | "register">("login");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -23,6 +24,7 @@ export function AuthView() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [busy, setBusy] = useState(false);
+  const [otp, setOtp] = useState("");
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
@@ -32,6 +34,7 @@ export function AuthView() {
       if (mode === "login") {
         await login(username, password);
         setPassword("");
+        setOtp("");
       }
       else {
         await registerUser(username, password, "passenger", {
@@ -47,6 +50,33 @@ export function AuthView() {
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "ดำเนินการไม่สำเร็จ");
+    } finally {
+      setBusy(false);
+    }
+  };
+  const submitOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (busy) return;
+    setError("");
+    setBusy(true);
+    try {
+      await verifyOtp(otp);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "ยืนยัน OTP ไม่สำเร็จ");
+    } finally {
+      setBusy(false);
+    }
+  };
+  const backToLogin = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      await cancelOtp();
+      setOtp("");
+      setPassword("");
+      setSuccess("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "กลับไปหน้าเข้าสู่ระบบไม่สำเร็จ");
     } finally {
       setBusy(false);
     }
@@ -80,17 +110,20 @@ export function AuthView() {
         </div>
       </div>
       <div className="auth-form-wrap">
-        <div className="auth-card">
+        <div className={`auth-card${pendingOtpUser ? " otp-card" : ""}`}>
+          {pendingOtpUser && <div className="otp-icon"><Smartphone size={28} /></div>}
           <div className="auth-card-head">
-            <p className="eyebrow accent">WELCOME BACK</p>
-            <h2>{mode === "login" ? "เข้าสู่ระบบ" : "สร้างบัญชีใหม่"}</h2>
+            <p className="eyebrow accent">{pendingOtpUser ? "OTP VERIFICATION" : "WELCOME BACK"}</p>
+            <h2>{pendingOtpUser ? "กรอกรหัส OTP" : mode === "login" ? "เข้าสู่ระบบ" : "สร้างบัญชีใหม่"}</h2>
             <p className="muted">
-              {mode === "login"
+              {pendingOtpUser
+                ? "กรุณากรอกรหัสตัวเลข 6 หลักเพื่อเข้าสู่ระบบ"
+                : mode === "login"
                 ? "เข้าสู่ EveryVan เพื่อจัดการการเดินทางของคุณ"
                 : "สมัครสมาชิกเพื่อเริ่มจองตั๋วรถตู้"}
             </p>
           </div>
-          <div className="auth-tabs">
+          {!pendingOtpUser && <div className="auth-tabs">
             <button
               type="button"
               className={mode === "login" ? "active" : ""}
@@ -113,7 +146,7 @@ export function AuthView() {
             >
               สมัครสมาชิก
             </button>
-          </div>
+          </div>}
           {error && (
             <div className="auth-error" role="alert">
               {error}
@@ -124,7 +157,35 @@ export function AuthView() {
               {success}
             </div>
           )}
-          <form onSubmit={submit} className="auth-form">
+          {pendingOtpUser ? (
+            <form onSubmit={submitOtp} className="auth-form">
+              <div className="field">
+                <label htmlFor="otp-code">รหัส OTP 6 หลัก</label>
+                <input
+                  id="otp-code"
+                  className="otp-input"
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  autoFocus
+                  pattern="[0-9]{6}"
+                  minLength={6}
+                  maxLength={6}
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value.replace(/[^0-9]/g, "").slice(0, 6))}
+                  placeholder="กรอกรหัส 6 หลัก"
+                  disabled={busy}
+                  required
+                />
+              </div>
+              <button className="btn primary auth-submit" disabled={busy || otp.length !== 6}>
+                {busy ? "กำลังยืนยัน..." : "ยืนยันและเข้าสู่ระบบ"} <ArrowRight size={16} />
+              </button>
+              <button type="button" className="text-button otp-cancel" disabled={busy} onClick={() => void backToLogin()}>
+                กลับไปหน้าเข้าสู่ระบบ
+              </button>
+            </form>
+          ) : <form onSubmit={submit} className="auth-form">
             {mode === "register" && (
               <>
                 <div className="field">
@@ -225,7 +286,7 @@ export function AuthView() {
                   : "สร้างบัญชี"}{" "}
               <ArrowRight size={16} />
             </button>
-          </form>
+          </form>}
         </div>
         <p className="auth-footer">
           © {new Date().getFullYear()} EveryVan · ระบบจองรถตู้ที่คุณไว้ใจ

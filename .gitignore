@@ -9,7 +9,18 @@ lerna-debug.log*
 
 node_modules
 dist-ssr
-docs
+# Keep generated captures and verification output local; include maintained guides.
+/docs/*
+!/docs/README.md
+!/docs/code-guide/
+!/docs/architecture/
+/docs/architecture/*
+!/docs/architecture/README.md
+!/docs/architecture/everyvan-*.png
+!/docs/architecture/everyvan-*.svg
+!/docs/architecture/everyvan-*.mmd
+!/docs/architecture/render_maps.py
+!/docs/architecture/export_maps.cjs
 *.local
 __pycache__/
 *.py[cod]

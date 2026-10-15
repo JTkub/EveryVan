@@ -74,7 +74,7 @@ export function RecurringSchedules() {
         <div className="field"><label htmlFor="recurring-plate">ทะเบียนรถ</label><input id="recurring-plate" required maxLength={20} value={form.license_plate} onChange={e => change("license_plate", e.target.value)} /></div>
         <div className="field"><label htmlFor="recurring-driver">คนขับ</label><select id="recurring-driver" required value={form.driver_id || ""} onChange={e => change("driver_id", Number(e.target.value))}><option value="">เลือกคนขับ</option>{drivers.map(driver => <option key={driver.id} value={driver.id}>{driver.name}</option>)}</select></div>
         <div className="field"><label htmlFor="recurring-fare">ค่าโดยสาร (บาท)</label><input id="recurring-fare" required type="number" min={0} max={99999999.99} step="0.01" value={form.price} onChange={e => change("price", Number(e.target.value))} /></div>
-        <div className="field"><label htmlFor="recurring-stops">จุดลงรถ (หนึ่งจุดต่อบรรทัด)</label><textarea id="recurring-stops" rows={4} required value={stops} onChange={e => setStops(e.target.value)} /></div>
+        <div className="field"><label htmlFor="recurring-stops">จุดรับ–ส่งระหว่างทาง (เรียงตามเส้นทาง หนึ่งจุดต่อบรรทัด)</label><textarea id="recurring-stops" rows={4} required value={stops} onChange={e => setStops(e.target.value)} /><small className="field-hint">ใช้ได้ทั้งขึ้นและลงรถตามลำดับ ปลายทางจะอยู่ท้ายเส้นทางเสมอ</small></div>
       </div>
       <label className="recurring-enabled"><input type="checkbox" checked={form.enabled} onChange={e => change("enabled", e.target.checked)} /> เปิดสร้างคิวอัตโนมัติทุกวัน</label>
       <div className="form-actions">

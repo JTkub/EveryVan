@@ -22,7 +22,7 @@ export interface Van {
   capacity: number;
   status: "Waiting" | "Travelling" | "Departed" | "Accident" | "Completed";
   destination: string;
-  /** จุดลงที่ผู้จัดคิวกำหนดเฉพาะสำหรับเที่ยวรถนี้ */
+  /** จุดรับ–ส่งที่ผู้จัดคิวกำหนดตามลำดับเส้นทาง */
   dropOffPoints?: string[];
   departureTime: string;
   arrivalTime?: string;
@@ -72,6 +72,7 @@ export interface Booking {
   passengerName: string;
   passengerPhone: string;
   seatNo: number;
+  boardingPoint?: string;
   dropOffPoint: string;
   date: string;
   timeSlot: string;

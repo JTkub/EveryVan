@@ -1,0 +1,30 @@
+flowchart TB
+    Entry["index.html → src/main.tsx"] --> App["src/App.tsx<br/>VanProvider → Dashboard"]
+    App --> Auth["ยังไม่ล็อกอิน<br/>src/view/AuthView.tsx"]
+    App --> Screens["ล็อกอินแล้ว: DashboardContent<br/>เลือกหน้าด้วย active และ role<br/>หน้าส่วนใหญ่อยู่ใน App.tsx"]
+    Auth --> Context["src/context/VanContext.tsx<br/>useVan / state / actions<br/>refreshDatabase ทุก 5 วินาทีหลังล็อกอิน"]
+    Screens --> Context
+    Screens --> Direct["AdminAccountsPage / FollowersPage / ScannerPage<br/>เรียก api.ts โดยตรง"]
+    Screens --> RecurringUI["CreateTripPage<br/>→ src/view/RecurringSchedules.tsx"]
+    RecurringUI -. "api.recurring โดยตรง" .-> Client
+    Context --> Client["src/services/api.ts<br/>fetch + JSON + Bearer token<br/>แปลงข้อมูล API เป็น domain types"]
+    Direct -.-> Client
+    Client --> Proxy["Dev: Vite proxy<br/>Docker: Nginx /api proxy<br/>หรือ VITE_API_URL ที่กำหนด"]
+    Proxy --> Flask["api/app.py — Flask<br/>ตรวจ session / สิทธิ์ / เงื่อนไขธุรกิจ"]
+    Flask --> Security["api/security.py<br/>password hashing / token hashing"]
+    Flask --> Recurring["api/recurring.py<br/>สร้างเที่ยวรถช่วง 7 วัน / ป้องกันคิวซ้ำ"]
+    Flask --> DB[("PostgreSQL<br/>psycopg + SQL")]
+    Recurring --> DB
+    Scheduler["api/maintenance.py<br/>รันทุก 30 วินาที<br/>ไม่ต้องมีคนเปิดเว็บ"] --> Recurring
+    Scheduler --> Cleanup["ฟังก์ชันจาก app.py<br/>ล้างการจองหมดเวลา / แจ้งเตือนก่อนออกเดินทาง"]
+    Cleanup --> DB
+    Schema["api/ticket_schema.sql<br/>โครงสร้างตาราง"] -.-> DB
+    Context -. "แจ้งเตือนบางส่วน" .-> Local["localStorage<br/>ข้อมูลจองและตั๋วหลักอยู่ใน PostgreSQL"]
+    Client -. "session" .-> Local
+
+    classDef front fill:#edf4ff,stroke:#2765d7,color:#172b46
+    classDef back fill:#f0faf7,stroke:#087f74,color:#172b46
+    classDef direct fill:#f3effb,stroke:#7852bd,color:#172b46
+    class Entry,App,Auth,Screens,Context,Client,Proxy front
+    class Flask,Security,Recurring,DB,Scheduler,Cleanup,Schema back
+    class Direct,RecurringUI direct

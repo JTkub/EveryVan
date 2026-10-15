@@ -1,0 +1,136 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2200" height="2250" viewBox="0 0 2200 2250" role="img" aria-label="อยากแก้ส่วนไหน ต้องเปิดไฟล์อะไร">
+<style>text{font-family:Tahoma,"Leelawadee UI",sans-serif}</style>
+<defs>
+<marker id="blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 Z" fill="#2765d7"/></marker>
+<marker id="teal" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 Z" fill="#087f74"/></marker>
+<marker id="purple" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 Z" fill="#7852bd"/></marker>
+</defs>
+<rect width="2200" height="2250" fill="#f5f8fc"/>
+<text x="80" y="82" font-size="25" fill="#2765d7" font-weight="700" text-anchor="start">EVERYVAN / CODE MAP</text>
+<text x="80" y="153" font-size="54" fill="#172b46" font-weight="700" text-anchor="start">อยากแก้ส่วนไหน ต้องเปิดไฟล์อะไร</text>
+<text x="80" y="205" font-size="26" fill="#52657c" font-weight="400" text-anchor="start">ทุกแถว → src/services/api.ts → Flask api/app.py → PostgreSQL  •  เส้นประ = เรียก API ตรง</text>
+<rect x="80" y="252" width="2040" height="108" rx="20" fill="#edf4ff" stroke="#c8dafa" stroke-width="2"/>
+<text x="112" y="295" font-size="29" fill="#172b46" font-weight="700" text-anchor="start">จุดประกอบหน้าจอ: App.tsx → VanProvider → Dashboard → AuthView หรือ DashboardContent</text>
+<text x="112" y="338" font-size="26" fill="#52657c" font-weight="400" text-anchor="start">DashboardContent เลือกหน้าโดย active และ role  •  ภาพรวมแยก passenger / driver / queue / finance / admin</text>
+<text x="100" y="424" font-size="30" fill="#172b46" font-weight="700" text-anchor="start">หน้าจอ / ฟีเจอร์</text>
+<text x="670" y="424" font-size="30" fill="#172b46" font-weight="700" text-anchor="start">ไฟล์ที่ต้องเปิด</text>
+<text x="1200" y="424" font-size="30" fill="#172b46" font-weight="700" text-anchor="start">ทางที่เรียกข้อมูล</text>
+<text x="1690" y="424" font-size="28" fill="#172b46" font-weight="700" text-anchor="start">API หลัก (ต่อจาก /api)</text>
+<rect x="80" y="463" width="2040" height="142" rx="0" fill="#ffffff" stroke="#ffffff" stroke-width="2"/>
+<path d="M80 605 L2120 605" fill="none" stroke="#d6e0ec" stroke-width="2"/>
+<text x="100" y="512" font-size="27" fill="#172b46" font-weight="700" text-anchor="start">เข้าสู่ระบบ / สมัครสมาชิก</text>
+<text x="100" y="559" font-size="21" fill="#52657c" font-weight="400" text-anchor="start">AuthView</text>
+<text x="670" y="515" font-size="25" fill="#2765d7" font-weight="400" text-anchor="start">src/view/AuthView.tsx</text>
+<text x="1200" y="515" font-size="25" fill="#2765d7" font-weight="400" text-anchor="start">VanContext</text>
+<text x="1200" y="555" font-size="23" fill="#2765d7" font-weight="400" text-anchor="start">login / registerUser</text>
+<text x="1690" y="515" font-size="22" fill="#087f74" font-weight="400" text-anchor="start">/auth/login</text>
+<text x="1690" y="555" font-size="22" fill="#087f74" font-weight="400" text-anchor="start">/auth/register, /auth/session</text>
+<path d="M1100 532 L1170 532" fill="none" stroke="#2765d7" stroke-width="4" stroke-linejoin="round" marker-end="url(#blue)"/>
+<path d="M1587 532 L1660 532" fill="none" stroke="#2765d7" stroke-width="4" stroke-linejoin="round" marker-end="url(#blue)"/>
+<path d="M80 747 L2120 747" fill="none" stroke="#d6e0ec" stroke-width="2"/>
+<text x="100" y="654" font-size="27" fill="#172b46" font-weight="700" text-anchor="start">ค้นหาเที่ยวรถ / จอง / จ่าย</text>
+<text x="100" y="701" font-size="21" fill="#52657c" font-weight="400" text-anchor="start">PassengerOverview · BookingPage</text>
+<text x="670" y="657" font-size="25" fill="#2765d7" font-weight="400" text-anchor="start">src/App.tsx</text>
+<text x="1200" y="657" font-size="25" fill="#2765d7" font-weight="400" text-anchor="start">VanContext</text>
+<text x="1200" y="697" font-size="23" fill="#2765d7" font-weight="400" text-anchor="start">bookTicket / confirmPayment</text>
+<text x="1690" y="657" font-size="22" fill="#087f74" font-weight="400" text-anchor="start">GET /trips</text>
+<text x="1690" y="697" font-size="22" fill="#087f74" font-weight="400" text-anchor="start">POST /bookings, /bookings/:id/pay</text>
+<path d="M1100 674 L1170 674" fill="none" stroke="#2765d7" stroke-width="4" stroke-linejoin="round" marker-end="url(#blue)"/>
+<path d="M1587 674 L1660 674" fill="none" stroke="#2765d7" stroke-width="4" stroke-linejoin="round" marker-end="url(#blue)"/>
+<rect x="80" y="747" width="2040" height="142" rx="0" fill="#ffffff" stroke="#ffffff" stroke-width="2"/>
+<path d="M80 889 L2120 889" fill="none" stroke="#d6e0ec" stroke-width="2"/>
+<text x="100" y="796" font-size="27" fill="#172b46" font-weight="700" text-anchor="start">ตั๋วของฉัน / ยกเลิก / รีวิว</text>
+<text x="100" y="843" font-size="21" fill="#52657c" font-weight="400" text-anchor="start">TicketsPageV2</text>
+<text x="670" y="799" font-size="25" fill="#2765d7" font-weight="400" text-anchor="start">src/App.tsx</text>
+<text x="1200" y="799" font-size="25" fill="#2765d7" font-weight="400" text-anchor="start">VanContext</text>
+<text x="1200" y="839" font-size="23" fill="#2765d7" font-weight="400" text-anchor="start">cancelBooking / addReview</text>
+<text x="1690" y="799" font-size="22" fill="#087f74" font-weight="400" text-anchor="start">GET /bookings, POST .../cancel</text>
+<text x="1690" y="839" font-size="22" fill="#087f74" font-weight="400" text-anchor="start">POST /drivers/:id/reviews</text>
+<path d="M1100 816 L1170 816" fill="none" stroke="#2765d7" stroke-width="4" stroke-linejoin="round" marker-end="url(#blue)"/>
+<path d="M1587 816 L1660 816" fill="none" stroke="#2765d7" stroke-width="4" stroke-linejoin="round" marker-end="url(#blue)"/>
+<path d="M80 1031 L2120 1031" fill="none" stroke="#d6e0ec" stroke-width="2"/>
+<text x="100" y="938" font-size="27" fill="#172b46" font-weight="700" text-anchor="start">งานคนขับ / สถานะเที่ยว / ผู้โดยสาร</text>
+<text x="100" y="985" font-size="21" fill="#52657c" font-weight="400" text-anchor="start">DriverOverview · OperationsPage</text>
+<text x="670" y="941" font-size="25" fill="#2765d7" font-weight="400" text-anchor="start">src/App.tsx</text>
+<text x="1200" y="941" font-size="25" fill="#2765d7" font-weight="400" text-anchor="start">VanContext</text>
+<text x="1200" y="981" font-size="23" fill="#2765d7" font-weight="400" text-anchor="start">updateVanStatus / board / alight</text>
+<text x="1690" y="941" font-size="22" fill="#087f74" font-weight="400" text-anchor="start">PATCH /trips/:id/status, /location</text>
+<text x="1690" y="981" font-size="22" fill="#087f74" font-weight="400" text-anchor="start">POST .../board, /alight, /complete</text>
+<path d="M1100 958 L1170 958" fill="none" stroke="#2765d7" stroke-width="4" stroke-linejoin="round" marker-end="url(#blue)"/>
+<path d="M1587 958 L1660 958" fill="none" stroke="#2765d7" stroke-width="4" stroke-linejoin="round" marker-end="url(#blue)"/>
+<rect x="80" y="1031" width="2040" height="142" rx="0" fill="#ffffff" stroke="#ffffff" stroke-width="2"/>
+<path d="M80 1173 L2120 1173" fill="none" stroke="#d6e0ec" stroke-width="2"/>
+<text x="100" y="1080" font-size="27" fill="#172b46" font-weight="700" text-anchor="start">จัดคิว / เพิ่มเที่ยว / ปรับเวลา</text>
+<text x="100" y="1127" font-size="21" fill="#52657c" font-weight="400" text-anchor="start">QueueOverview · CreateTripPage · OperationsPage</text>
+<text x="670" y="1083" font-size="25" fill="#2765d7" font-weight="400" text-anchor="start">src/App.tsx</text>
+<text x="1200" y="1083" font-size="25" fill="#2765d7" font-weight="400" text-anchor="start">VanContext</text>
+<text x="1200" y="1123" font-size="23" fill="#2765d7" font-weight="400" text-anchor="start">สร้างเที่ยว / ปรับเวลาออก</text>
+<text x="1690" y="1083" font-size="22" fill="#087f74" font-weight="400" text-anchor="start">GET, POST /trips</text>
+<text x="1690" y="1123" font-size="22" fill="#087f74" font-weight="400" text-anchor="start">PATCH /trips/:id/time</text>
+<path d="M1100 1100 L1170 1100" fill="none" stroke="#2765d7" stroke-width="4" stroke-linejoin="round" marker-end="url(#blue)"/>
+<path d="M1587 1100 L1660 1100" fill="none" stroke="#2765d7" stroke-width="4" stroke-linejoin="round" marker-end="url(#blue)"/>
+<path d="M80 1315 L2120 1315" fill="none" stroke="#d6e0ec" stroke-width="2"/>
+<text x="100" y="1222" font-size="27" fill="#172b46" font-weight="700" text-anchor="start">ภาพรวมการเงิน / รายงาน</text>
+<text x="100" y="1269" font-size="21" fill="#52657c" font-weight="400" text-anchor="start">FinanceOverview · ReportsPage</text>
+<text x="670" y="1225" font-size="25" fill="#2765d7" font-weight="400" text-anchor="start">src/App.tsx</text>
+<text x="1200" y="1225" font-size="25" fill="#2765d7" font-weight="400" text-anchor="start">VanContext.transactions</text>
+<text x="1200" y="1265" font-size="23" fill="#2765d7" font-weight="400" text-anchor="start">รวมยอดบนเบราว์เซอร์</text>
+<text x="1690" y="1225" font-size="22" fill="#087f74" font-weight="400" text-anchor="start">GET /reports/daily</text>
+<path d="M1100 1242 L1170 1242" fill="none" stroke="#2765d7" stroke-width="4" stroke-linejoin="round" marker-end="url(#blue)"/>
+<path d="M1587 1242 L1660 1242" fill="none" stroke="#2765d7" stroke-width="4" stroke-linejoin="round" marker-end="url(#blue)"/>
+<rect x="80" y="1315" width="2040" height="142" rx="0" fill="#ffffff" stroke="#ffffff" stroke-width="2"/>
+<path d="M80 1457 L2120 1457" fill="none" stroke="#d6e0ec" stroke-width="2"/>
+<text x="100" y="1364" font-size="27" fill="#172b46" font-weight="700" text-anchor="start">ข้อมูลส่วนตัว / เปลี่ยนรหัสผ่าน</text>
+<text x="100" y="1411" font-size="21" fill="#52657c" font-weight="400" text-anchor="start">ProfilePage</text>
+<text x="670" y="1367" font-size="25" fill="#2765d7" font-weight="400" text-anchor="start">src/App.tsx</text>
+<text x="1200" y="1367" font-size="25" fill="#2765d7" font-weight="400" text-anchor="start">VanContext</text>
+<text x="1200" y="1407" font-size="23" fill="#2765d7" font-weight="400" text-anchor="start">แก้โปรไฟล์ / เปลี่ยนรหัสผ่าน</text>
+<text x="1690" y="1367" font-size="22" fill="#087f74" font-weight="400" text-anchor="start">PUT /auth/profile</text>
+<text x="1690" y="1407" font-size="22" fill="#087f74" font-weight="400" text-anchor="start">PUT /auth/password</text>
+<path d="M1100 1384 L1170 1384" fill="none" stroke="#2765d7" stroke-width="4" stroke-linejoin="round" marker-end="url(#blue)"/>
+<path d="M1587 1384 L1660 1384" fill="none" stroke="#2765d7" stroke-width="4" stroke-linejoin="round" marker-end="url(#blue)"/>
+<path d="M80 1599 L2120 1599" fill="none" stroke="#d6e0ec" stroke-width="2"/>
+<text x="100" y="1506" font-size="27" fill="#172b46" font-weight="700" text-anchor="start">จัดการบัญชีพนักงาน / ลูกค้า</text>
+<text x="100" y="1553" font-size="21" fill="#52657c" font-weight="400" text-anchor="start">AdminAccountsPage</text>
+<text x="670" y="1509" font-size="25" fill="#2765d7" font-weight="400" text-anchor="start">src/App.tsx</text>
+<text x="1200" y="1509" font-size="25" fill="#7852bd" font-weight="400" text-anchor="start">api.admin.* โดยตรง</text>
+<text x="1690" y="1509" font-size="22" fill="#087f74" font-weight="400" text-anchor="start">/admin/users</text>
+<text x="1690" y="1549" font-size="22" fill="#087f74" font-weight="400" text-anchor="start">/admin/employees</text>
+<path d="M1100 1526 L1170 1526" fill="none" stroke="#7852bd" stroke-width="4" stroke-linejoin="round" stroke-dasharray="12 9" marker-end="url(#purple)"/>
+<path d="M1587 1526 L1660 1526" fill="none" stroke="#7852bd" stroke-width="4" stroke-linejoin="round" stroke-dasharray="12 9" marker-end="url(#purple)"/>
+<rect x="80" y="1599" width="2040" height="142" rx="0" fill="#ffffff" stroke="#ffffff" stroke-width="2"/>
+<path d="M80 1741 L2120 1741" fill="none" stroke="#d6e0ec" stroke-width="2"/>
+<text x="100" y="1648" font-size="27" fill="#172b46" font-weight="700" text-anchor="start">สแกนตั๋วและเช็กอิน</text>
+<text x="100" y="1695" font-size="21" fill="#52657c" font-weight="400" text-anchor="start">ScannerPage</text>
+<text x="670" y="1651" font-size="25" fill="#2765d7" font-weight="400" text-anchor="start">src/App.tsx</text>
+<text x="1200" y="1651" font-size="25" fill="#7852bd" font-weight="400" text-anchor="start">api.scanner.scan โดยตรง</text>
+<text x="1200" y="1691" font-size="23" fill="#7852bd" font-weight="400" text-anchor="start">เสร็จแล้ว refreshDatabase()</text>
+<text x="1690" y="1651" font-size="22" fill="#087f74" font-weight="400" text-anchor="start">POST /scan</text>
+<text x="1690" y="1691" font-size="22" fill="#087f74" font-weight="400" text-anchor="start">paid → boarded ในคำขอเดียว</text>
+<path d="M1100 1668 L1170 1668" fill="none" stroke="#7852bd" stroke-width="4" stroke-linejoin="round" stroke-dasharray="12 9" marker-end="url(#purple)"/>
+<path d="M1587 1668 L1660 1668" fill="none" stroke="#7852bd" stroke-width="4" stroke-linejoin="round" stroke-dasharray="12 9" marker-end="url(#purple)"/>
+<path d="M80 1883 L2120 1883" fill="none" stroke="#d6e0ec" stroke-width="2"/>
+<text x="100" y="1790" font-size="27" fill="#172b46" font-weight="700" text-anchor="start">ผู้ติดตามการเดินทาง</text>
+<text x="100" y="1837" font-size="21" fill="#52657c" font-weight="400" text-anchor="start">FollowersPage</text>
+<text x="670" y="1793" font-size="25" fill="#2765d7" font-weight="400" text-anchor="start">src/App.tsx</text>
+<text x="1200" y="1793" font-size="25" fill="#7852bd" font-weight="400" text-anchor="start">api.followers.* โดยตรง</text>
+<text x="1690" y="1793" font-size="22" fill="#087f74" font-weight="400" text-anchor="start">GET, POST /followers</text>
+<text x="1690" y="1833" font-size="22" fill="#087f74" font-weight="400" text-anchor="start">PATCH, DELETE /followers/:id</text>
+<path d="M1100 1810 L1170 1810" fill="none" stroke="#7852bd" stroke-width="4" stroke-linejoin="round" stroke-dasharray="12 9" marker-end="url(#purple)"/>
+<path d="M1587 1810 L1660 1810" fill="none" stroke="#7852bd" stroke-width="4" stroke-linejoin="round" stroke-dasharray="12 9" marker-end="url(#purple)"/>
+<rect x="80" y="1883" width="2040" height="142" rx="0" fill="#ffffff" stroke="#ffffff" stroke-width="2"/>
+<path d="M80 2025 L2120 2025" fill="none" stroke="#d6e0ec" stroke-width="2"/>
+<text x="100" y="1932" font-size="27" fill="#172b46" font-weight="700" text-anchor="start">คิวสายประจำอัตโนมัติ</text>
+<text x="100" y="1979" font-size="21" fill="#52657c" font-weight="400" text-anchor="start">RecurringSchedules (อยู่ใน CreateTripPage)</text>
+<text x="670" y="1935" font-size="25" fill="#2765d7" font-weight="400" text-anchor="start">src/view/</text>
+<text x="670" y="1974" font-size="25" fill="#2765d7" font-weight="400" text-anchor="start">RecurringSchedules.tsx</text>
+<text x="1200" y="1935" font-size="25" fill="#7852bd" font-weight="400" text-anchor="start">api.recurring.* โดยตรง</text>
+<text x="1200" y="1975" font-size="23" fill="#7852bd" font-weight="400" text-anchor="start">เสร็จแล้ว refreshDatabase()</text>
+<text x="1690" y="1935" font-size="22" fill="#087f74" font-weight="400" text-anchor="start">/recurring-schedules</text>
+<text x="1690" y="1975" font-size="22" fill="#087f74" font-weight="400" text-anchor="start">GET, POST และ PUT /:id</text>
+<path d="M1100 1952 L1170 1952" fill="none" stroke="#7852bd" stroke-width="4" stroke-linejoin="round" stroke-dasharray="12 9" marker-end="url(#purple)"/>
+<path d="M1587 1952 L1660 1952" fill="none" stroke="#7852bd" stroke-width="4" stroke-linejoin="round" stroke-dasharray="12 9" marker-end="url(#purple)"/>
+<text x="80" y="2090" font-size="27" fill="#172b46" font-weight="400" text-anchor="start">ส่วนร่วม: Sidebar / Topbar อยู่ใน App.tsx  •  แจ้งเตือนผ่าน VanContext → /notifications และ /notifications/read</text>
+<text x="80" y="2140" font-size="27" fill="#172b46" font-weight="400" text-anchor="start">ตั๋วแสดง QR ด้วย qrcode.react  •  Scanner เปิดกล้องและอ่าน QR ด้วย jsqr  •  /scan เช็กอินและบันทึก scanned_at</text>
+<text x="80" y="2190" font-size="26" fill="#52657c" font-weight="400" text-anchor="start">ตารางนี้จับคู่โค้ดและ API หลักของแต่ละฟีเจอร์ ไม่ใช่ตารางสิทธิ์ของบทบาทหรือรายการ endpoint ทั้งหมด</text>
+</svg>

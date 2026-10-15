@@ -121,6 +121,7 @@ const mapBooking = (b: any): Booking => ({
     passengerName: b.passenger_name ?? b.passengerName ?? "",
     passengerPhone: b.phone ?? b.passengerPhone ?? "",
     seatNo: Number(b.seat_number ?? b.seatNo),
+    boardingPoint: b.boarding_point ?? b.boardingPoint ?? "",
     dropOffPoint: b.alighting_point ?? b.dropOffPoint ?? "",
     date: b.departure_time
         ? bangkokDate(new Date(b.departure_time))

@@ -36,6 +36,9 @@ interface VanContextType {
   token: string | null;
   dataMode: DataMode;
   login: (username: string, password: string) => Promise<void>;
+  pendingOtpUser: SessionUser | null;
+  verifyOtp: (code: string) => Promise<void>;
+  cancelOtp: () => Promise<void>;
   logout: () => Promise<void>;
   registerUser: (
     username: string,
@@ -103,11 +106,13 @@ interface VanContextType {
 }
 
 const VanContext = createContext<VanContextType | undefined>(undefined);
+const OTP_VERIFIED_SESSION_KEY = "everyvan_otp_verified_session";
 
 export const VanProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
   const [currentUser, setCurrentUser] = useState<SessionUser | null>(null);
+  const [pendingOtpUser, setPendingOtpUser] = useState<SessionUser | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [dataMode, setDataMode] = useState<DataMode>(apiStatus.get());
 
@@ -199,10 +204,16 @@ export const VanProvider: React.FC<{ children: React.ReactNode }> = ({
       const session = await api.auth.getSession();
       if (session) {
         setToken(session.token);
-        setCurrentUser(session.user);
-        setNotifications(loadLocalNotifications(session.user.username));
-        await refreshDatabase(session.user.role);
+        if (sessionStorage.getItem(OTP_VERIFIED_SESSION_KEY) === session.token) {
+          setCurrentUser(session.user);
+          setNotifications(loadLocalNotifications(session.user.username));
+          await refreshDatabase(session.user.role);
+        } else {
+          setPendingOtpUser(session.user);
+          await refreshDatabase();
+        }
       } else {
+        sessionStorage.removeItem(OTP_VERIFIED_SESSION_KEY);
         await refreshDatabase();
       }
     };
@@ -241,16 +252,28 @@ export const VanProvider: React.FC<{ children: React.ReactNode }> = ({
   // Auth Operations
   const login = async (username: string, password: string) => {
     const res = await api.auth.login(username, password);
+    sessionStorage.removeItem(OTP_VERIFIED_SESSION_KEY);
     setToken(res.token);
-    setCurrentUser(res.user);
-    setNotifications(loadLocalNotifications(res.user.username));
-    await refreshDatabase(res.user.role);
+    setPendingOtpUser(res.user);
+  };
+
+  const verifyOtp = async (code: string) => {
+    if (!pendingOtpUser || !token) throw new Error("ไม่พบรายการยืนยัน OTP กรุณาเข้าสู่ระบบอีกครั้ง");
+    // Presentation-only OTP: any six ASCII digits are accepted; no SMS is sent.
+    if (!/^[0-9]{6}$/.test(code)) throw new Error("กรุณากรอกรหัส OTP เป็นตัวเลข 6 หลักเท่านั้น");
+    sessionStorage.setItem(OTP_VERIFIED_SESSION_KEY, token);
+    setCurrentUser(pendingOtpUser);
+    setNotifications(loadLocalNotifications(pendingOtpUser.username));
+    setPendingOtpUser(null);
+    await refreshDatabase(pendingOtpUser.role);
   };
 
   const logout = async () => {
     await api.auth.logout();
+    sessionStorage.removeItem(OTP_VERIFIED_SESSION_KEY);
     setToken(null);
     setCurrentUser(null);
+    setPendingOtpUser(null);
     setVans([]);
     setDrivers([]);
     setBookings([]);
@@ -494,6 +517,9 @@ export const VanProvider: React.FC<{ children: React.ReactNode }> = ({
         token,
         dataMode,
         login,
+        pendingOtpUser,
+        verifyOtp,
+        cancelOtp: logout,
         logout,
         registerUser,
         updateUserProfile,

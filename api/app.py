@@ -18,6 +18,11 @@ try:
 except ImportError:
     from recurring import BANGKOK, generate_daily_trips, lock_generation, normalize_template
 
+try:
+    from .journey import ORIGIN_BOARDING_POINTS, route_stops
+except ImportError:
+    from journey import ORIGIN_BOARDING_POINTS, route_stops
+
 ROOT = Path(__file__).resolve().parent
 load_dotenv(ROOT.parent / ".env")
 DATABASE_URL = os.getenv("DATABASE_URL", "")
@@ -917,9 +922,9 @@ def trips():
             if u and u["role"] == "driver" and x["driver_user_id"] != u["user_id"]:
                 continue
             if not u or u["role"] == "passenger":
-                stops = x["drop_off_points"] or [x["destination"]]
+                stops = route_stops(x["drop_off_points"], x["destination"])
                 current_index = stops.index(x["current_stop"]) if x["current_stop"] in stops else -1
-                has_next_stop = current_index + 1 < len(stops)
+                has_next_stop = max(current_index, 0) < len(stops) - 1
                 if x["trip_status"] != "waiting" and not (x["trip_status"] in ("travelling", "departed") and has_next_stop):
                     continue
             out.append(
@@ -930,7 +935,7 @@ def trips():
                     "capacity": x["total_seats"],
                     "status": x["trip_status"].title(),
                     "destination": x["destination"],
-                    "dropOffPoints": x["drop_off_points"] or [x["destination"]],
+                    "dropOffPoints": route_stops(x["drop_off_points"], x["destination"]),
                     "departureTime": x["departure_time"].strftime("%H:%M"),
                     "arrivalTime": (
                         x["arrive_time"].strftime("%H:%M") if x["arrive_time"] else None
@@ -1173,7 +1178,7 @@ def create_booking():
                 if not p:
                     return jsonify(error="ไม่พบข้อมูลผู้โดยสาร"), 400
                 c.execute(
-                    "SELECT t.schedule_id,t.fare,t.trip_status,t.drop_off_points,t.current_stop,r.destination,v.total_seats,s.active_status,s.departure_time FROM trip t JOIN route r USING(route_id) JOIN vehicle v USING(vehicle_id) JOIN schedule s USING(schedule_id) WHERE t.trip_id=%s FOR UPDATE",
+                    "SELECT t.schedule_id,t.fare,t.trip_status,t.drop_off_points,t.current_stop,r.origin,r.destination,v.total_seats,s.active_status,s.departure_time FROM trip t JOIN route r USING(route_id) JOIN vehicle v USING(vehicle_id) JOIN schedule s USING(schedule_id) WHERE t.trip_id=%s FOR UPDATE",
                     (trip_id,),
                 )
                 t = c.fetchone()
@@ -1185,18 +1190,18 @@ def create_booking():
                     return jsonify(error="เที่ยวรถนี้ออกเดินทางแล้ว กรุณารอสถานะจุดรับถัดไป"), 409
                 if seat_number < 1 or seat_number > t["total_seats"]:
                     return jsonify(error="หมายเลขที่นั่งไม่ถูกต้อง"), 400
-                allowed_stops = t["drop_off_points"] or [t["destination"]]
+                allowed_stops = route_stops(t["drop_off_points"], t["destination"])
                 if alighting_point not in allowed_stops:
                     return jsonify(error="จุดลงรถนี้ไม่มีในเที่ยวรถที่เลือก"), 400
+                boarding_index = allowed_stops.index(boarding_point) if boarding_point in allowed_stops else -1
+                if boarding_index < 0 and boarding_point not in (*ORIGIN_BOARDING_POINTS, t["origin"]):
+                    return jsonify(error="จุดขึ้นรถนี้ไม่มีในเที่ยวรถที่เลือก"), 400
+                if allowed_stops.index(alighting_point) <= boarding_index:
+                    return jsonify(error="จุดลงต้องอยู่หลังจุดขึ้นของคุณ"), 400
                 if t["trip_status"] in ("travelling", "departed"):
                     current_index = allowed_stops.index(t["current_stop"]) if t["current_stop"] in allowed_stops else -1
-                    next_index = current_index + 1
-                    if next_index >= len(allowed_stops):
-                        return jsonify(error="รถผ่านทุกจุดรับระหว่างทางแล้ว"), 409
-                    if boarding_point != allowed_stops[next_index]:
-                        return jsonify(error="รถรับผู้โดยสารได้เฉพาะจุดถัดไปของเส้นทาง"), 409
-                    if alighting_point not in allowed_stops[next_index + 1:]:
-                        return jsonify(error="จุดลงต้องอยู่หลังจุดขึ้นของคุณ"), 400
+                    if boarding_index < max(current_index, 0):
+                        return jsonify(error="รถผ่านจุดขึ้นนี้แล้ว กรุณาเลือกจุดรับที่รถยังไม่ผ่าน"), 409
                 c.execute(
                     "SELECT 1 FROM booking WHERE trip_id=%s AND seat_number=%s AND booking_status NOT IN ('cancelled','completed','alighted')",
                     (trip_id, seat),
@@ -1449,6 +1454,20 @@ def trip_location(trip_id):
     if not current_stop:
         return jsonify(error="กรุณาระบุจุดปัจจุบันของรถ"), 400
     with db().cursor() as c:
+        c.execute(
+            "SELECT t.current_stop,t.drop_off_points,r.origin,r.destination FROM trip t JOIN route r USING(route_id) WHERE t.trip_id=%s FOR UPDATE OF t",
+            (trip_id,),
+        )
+        current = c.fetchone()
+        if not current:
+            return jsonify(error="ไม่พบเที่ยวรถ"), 404
+        stops = route_stops(current["drop_off_points"], current["destination"])
+        if current_stop not in (*ORIGIN_BOARDING_POINTS, current["origin"], *stops):
+            return jsonify(error="จุดนี้ไม่มีในเส้นทางของเที่ยวรถ"), 400
+        old_index = stops.index(current["current_stop"]) if current["current_stop"] in stops else -1
+        new_index = stops.index(current_stop) if current_stop in stops else -1
+        if new_index < old_index:
+            return jsonify(error="ไม่สามารถย้อนตำแหน่งรถกลับไปยังจุดที่ผ่านแล้ว"), 409
         c.execute(
             "UPDATE trip SET current_stop=%s,current_stop_updated_at=NOW() WHERE trip_id=%s RETURNING *",
             (current_stop, trip_id),

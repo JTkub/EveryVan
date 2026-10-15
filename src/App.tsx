@@ -22,7 +22,7 @@ import {
   UsersRound,
   X,
 } from "lucide-react";
-import { BOARDING_POINTS, VanProvider, useVan } from "./context/VanContext";
+import { VanProvider, useVan } from "./context/VanContext";
 import type { Booking, Van } from "./context/VanContext";
 import { api } from "./services/api";
 import type {
@@ -41,6 +41,7 @@ import {
   thaiTodayLong,
 } from "./utils/date";
 import { VEHICLE_CAPACITIES, vehicleCapacity } from "./utils/vehicle";
+import { tripStops, boardingOptionsFor, dropOffOptionsFor, canTravelBetween } from "./utils/journey";
 import "./App.css";
 
 type NavKey =
@@ -425,7 +426,7 @@ function TripCard({ van, onBook }: { van: Van; onBook: (van: Van) => void }) {
         </span>
         <span className="seat-capacity">{van.capacity} ที่นั่ง</span>
       </div>
-      <p className="trip-stops">จุดลง: {(van.dropOffPoints?.length ? van.dropOffPoints : [van.destination]).join(" · ")}</p>
+      <p className="trip-stops">จุดรับ–ส่ง: {tripStops(van).join(" → ")}</p>
       <button
         className="btn primary full"
         disabled={van.status === "Completed" || van.status === "Accident" || free === 0}
@@ -543,18 +544,9 @@ function BookingPage({
     initialVan || null,
   );
   const [seat, setSeat] = useState<number | null>(null);
-  const tripStops = (van: Van) => van.dropOffPoints?.length ? van.dropOffPoints : [van.destination];
-  const nextRouteStop = (van: Van) => {
-    const stops = tripStops(van);
-    const currentIndex = van.currentStop ? stops.indexOf(van.currentStop) : -1;
-    return stops[currentIndex + 1] || "";
-  };
-  const boardingOptionsFor = (van: Van) =>
-    van.status === "Waiting" ? boardingPoints : nextRouteStop(van) ? [nextRouteStop(van)] : [];
-  const canBook = (van: Van) => van.status === "Waiting" || (van.status === "Travelling" || van.status === "Departed") && !!nextRouteStop(van);
-  const [point, setPoint] = useState(initialVan && initialVan.status !== "Waiting" ? nextRouteStop(initialVan) : boardingPoints[0] || "สถานีขนส่งหมอชิต 2");
+  const [point, setPoint] = useState(initialVan ? boardingOptionsFor(initialVan, boardingPoints)[0] || "" : boardingPoints[0] || "");
   const [dropOffPoint, setDropOffPoint] = useState(
-    initialVan ? (initialVan.dropOffPoints?.[0] || initialVan.destination) : "",
+    initialVan ? dropOffOptionsFor(initialVan, point)[0] || "" : "",
   );
   const [date, setDate] = useState(initialVan?.date || bangkokDateInput());
   const [destinationFilter, setDestinationFilter] = useState("");
@@ -566,44 +558,51 @@ function BookingPage({
   const [error, setError] = useState("");
   const sortThai = (values: string[]) => [...values].sort((a, b) => a.localeCompare(b, "th"));
   const filterDropOffOptions = destinationFilter
-    ? sortThai([...new Set(vans.filter((van) => van.destination === destinationFilter).flatMap((van) => tripStops(van)))])
+    ? sortThai([...new Set(vans.filter((van) => van.destination === destinationFilter).flatMap((van) =>
+      boardingOptionsFor(van, boardingPoints).filter((stop) => !boardingFilter || stop === boardingFilter).flatMap((stop) => dropOffOptionsFor(van, stop)),
+    ))])
     : [];
   const availableVans = vans.filter(
     (v) =>
-      canBook(v) &&
+      canTravelBetween(v, boardingPoints, boardingFilter, dropOffFilter) &&
       (!destinationFilter || v.destination === destinationFilter) &&
-      (!boardingFilter || boardingOptionsFor(v).includes(boardingFilter)) &&
-      (!dropOffFilter || (v.dropOffPoints?.length ? v.dropOffPoints : [v.destination]).includes(dropOffFilter)) &&
       (!v.date || v.date === date),
   );
   const seats = Array.from(
     { length: selectedVan?.capacity || 14 },
     (_, i) => i + 1,
   );
-  const boardingOptions = selectedVan ? boardingOptionsFor(selectedVan) : [];
-  const dropOffOptions = selectedVan
-    ? selectedVan.status === "Waiting"
-      ? tripStops(selectedVan)
-      : tripStops(selectedVan).slice(tripStops(selectedVan).indexOf(point) + 1)
-    : [];
+  const boardingOptions = selectedVan ? boardingOptionsFor(selectedVan, boardingPoints) : [];
+  const dropOffOptions = selectedVan ? dropOffOptionsFor(selectedVan, point) : [];
   useEffect(() => {
     if (!selectedVan) return;
     const updatedVan = vans.find((van) => van.id === selectedVan.id);
     if (updatedVan) setSelectedVan(updatedVan);
-  }, [vans, selectedVan?.id]);
+  }, [vans, selectedVan]);
   useEffect(() => {
-    if (selectedVan && selectedVan.status !== "Waiting") setPoint(nextRouteStop(selectedVan));
-  }, [selectedVan?.id, selectedVan?.status, selectedVan?.currentStop]);
+    if (!selectedVan) return;
+    const options = boardingOptionsFor(selectedVan, boardingPoints);
+    const nextPoint = options.includes(point) ? point : options[0] || "";
+    if (nextPoint !== point) setPoint(nextPoint);
+    const dropOffs = nextPoint ? dropOffOptionsFor(selectedVan, nextPoint) : [];
+    if (!dropOffs.includes(dropOffPoint)) setDropOffPoint(dropOffs[0] || "");
+    if (seat !== null && selectedVan.occupiedSeats.includes(seat)) setSeat(null);
+  }, [selectedVan, boardingPoints, point, dropOffPoint, seat]);
   const chooseVan = (v: Van) => {
     setSelectedVan(v);
     setSeat(null);
-    setPoint(boardingFilter && boardingOptionsFor(v).includes(boardingFilter) ? boardingFilter : boardingOptionsFor(v)[0] || "");
-    const startsAt = v.status === "Waiting" ? 0 : tripStops(v).indexOf(nextRouteStop(v)) + 1;
-    setDropOffPoint(tripStops(v)[startsAt] || "");
+    const nextPoint = boardingFilter && boardingOptionsFor(v, boardingPoints).includes(boardingFilter) ? boardingFilter : boardingOptionsFor(v, boardingPoints)[0] || "";
+    setPoint(nextPoint);
+    const dropOffs = dropOffOptionsFor(v, nextPoint);
+    setDropOffPoint(dropOffs.includes(dropOffFilter) ? dropOffFilter : dropOffs[0] || "");
     setStep(2);
   };
   const createBooking = async () => {
     if (!selectedVan || seat === null) return;
+    if (!point || !dropOffPoint || !canTravelBetween(selectedVan, boardingPoints, point, dropOffPoint)) {
+      setError("กรุณาเลือกจุดขึ้นที่รถยังไม่ผ่าน และจุดลงที่อยู่ถัดไปตามเส้นทาง");
+      return;
+    }
     setBusy(true);
     setError("");
     try {
@@ -658,7 +657,7 @@ function BookingPage({
               <label>จุดขึ้นรถ</label>
               <select value={boardingFilter} onChange={(e) => setBoardingFilter(e.target.value)}>
                 <option value="">ทุกจุดขึ้น</option>
-                {sortThai([...new Set([...BOARDING_POINTS, ...vans.map(nextRouteStop).filter(Boolean)])]).map((stop) => <option key={stop}>{stop}</option>)}
+                {sortThai([...new Set(vans.flatMap((van) => boardingOptionsFor(van, boardingPoints)))]).map((stop) => <option key={stop}>{stop}</option>)}
               </select>
             </div>
             <div className="field">
@@ -801,11 +800,11 @@ function BookingPage({
             <div className="field">
               <label>จุดขึ้นรถ</label>
               <select value={point} onChange={(e) => setPoint(e.target.value)}>
-                {sortThai(boardingOptions).map((p) => (
+                {boardingOptions.map((p) => (
                   <option key={p}>{p}</option>
                 ))}
               </select>
-              {selectedVan.status !== "Waiting" && <small className="field-hint">รถกำลังเดินทาง: รับผู้โดยสารเพิ่มได้ที่จุดถัดไปเท่านั้น</small>}
+              <small className="field-hint">{selectedVan.status === "Waiting" ? "เลือกขึ้นได้ที่ต้นทางหรือจุดรับ–ส่งระหว่างทาง" : "รถกำลังเดินทาง: เลือกขึ้นที่จุดปัจจุบันหรือจุดที่รถยังไม่ผ่าน"}</small>
             </div>
             <div className="field">
               <label>จุดลงรถ</label>
@@ -827,7 +826,7 @@ function BookingPage({
             </div>
             <button
               className="btn primary full"
-              disabled={!seat || !dropOffPoint}
+              disabled={!seat || !point || !dropOffPoint || !canTravelBetween(selectedVan, boardingPoints, point, dropOffPoint)}
               onClick={() => setStep(3)}
             >
               ไปต่อ <ArrowRight size={16} />
@@ -846,7 +845,7 @@ function BookingPage({
           <div className="confirm-grid">
             <div>
               <span>เส้นทาง</span>
-              <strong>กรุงเทพฯ → {selectedVan.destination}</strong>
+              <strong>{point} → {dropOffPoint}</strong>
             </div>
             <div>
               <span>วันและเวลา</span>
@@ -861,6 +860,10 @@ function BookingPage({
             <div>
               <span>จุดขึ้นรถ</span>
               <strong>{point}</strong>
+            </div>
+            <div>
+              <span>จุดลงรถ</span>
+              <strong>{dropOffPoint}</strong>
             </div>
           </div>
           <div className="confirm-actions">
@@ -2417,12 +2420,12 @@ function TicketsPageV2() {
                 <div className="ticket-route-large">
                   <div>
                     <small>ต้นทาง</small>
-                    <strong>กรุงเทพฯ</strong>
+                    <strong>{b.boardingPoint || "กรุงเทพฯ"}</strong>
                   </div>
                   <ArrowRight size={20} />
                   <div>
                     <small>ปลายทาง</small>
-                    <strong>{van?.destination || b.destination || "ไม่ระบุ"}</strong>
+                    <strong>{b.dropOffPoint || van?.destination || b.destination || "ไม่ระบุ"}</strong>
                   </div>
                 </div>
                 <div className="ticket-details">
@@ -2635,7 +2638,7 @@ function CreateTripPage() {
             />
           </div>
           <div className="field">
-            <label>จุดลงรถย่อย</label>
+            <label>จุดรับ–ส่งระหว่างทาง (เรียงตามเส้นทาง)</label>
             <div className="inline-form">
               <input value={dropOffInput} placeholder="เช่น ประตูท่าแพ" onChange={(e) => setDropOffInput(e.target.value)} />
               <button type="button" className="btn secondary" onClick={() => { const point = dropOffInput.trim(); if (point && !dropOffPoints.includes(point)) { setDropOffPoints([...dropOffPoints, point]); setDropOffInput(""); } }}>เพิ่มจุด</button>
@@ -2643,7 +2646,7 @@ function CreateTripPage() {
             <div className="stop-chips">
               {dropOffPoints.map((point) => <span className="stop-chip" key={point}>{point}<button type="button" aria-label={`ลบ ${point}`} onClick={() => setDropOffPoints(dropOffPoints.filter((item) => item !== point))}><X size={13} /></button></span>)}
             </div>
-            <small className="field-hint">เพิ่มได้สูงสุด 30 จุด ผู้โดยสารจะเลือกได้เฉพาะรายการนี้</small>
+            <small className="field-hint">เพิ่มได้สูงสุด 30 จุด ใช้ได้ทั้งขึ้นและลงรถตามลำดับ ปลายทางจะอยู่ท้ายเส้นทางเสมอ</small>
           </div>
           <div className="field">
             <label>เวลาออกเดินทาง</label>
@@ -3023,12 +3026,13 @@ function OperationsPage() {
   const passengers = bookings.filter(
     (b) => b.vanId === current?.id && b.status !== "Cancelled",
   );
-  const routeStops = current
-    ? (current.dropOffPoints?.length ? current.dropOffPoints : [current.destination])
-    : [];
+  const routeStops = current ? tripStops(current) : [];
+  const locationStops = routeStops.slice(Math.max(routeStops.indexOf(current?.currentStop || ""), 0));
+  const selectedLocation = locationStops.includes(currentStop) ? currentStop : locationStops[0] || "";
   const passengersAtStop = (stop: string) =>
     passengers.filter((passenger) =>
-      (passenger.dropOffPoint || current?.destination) === stop,
+      (passenger.dropOffPoint || current?.destination) === stop &&
+      (passenger.status === "Boarded" || passenger.status === "Paid" || passenger.status === "Pending Payment"),
     );
   const runAction = async (name: string, action: () => Promise<void>) => {
     setError("");
@@ -3146,7 +3150,7 @@ function OperationsPage() {
               <div>
                 <strong>{p.passengerName}</strong>
                 <small>
-                  ที่นั่ง {p.seatNo} · ลงที่ {p.dropOffPoint || "ปลายทาง"} · Booking #{p.id}
+                  ที่นั่ง {p.seatNo} · ขึ้นที่ {p.boardingPoint || "ต้นทาง"} · ลงที่ {p.dropOffPoint || "ปลายทาง"} · Booking #{p.id}
                 </small>
               </div>
               <span className={`status-pill ${statusClass(p.status)}`}>
@@ -3196,19 +3200,20 @@ function OperationsPage() {
           )}
         </div>
       </div>
-      {isDriver && current && (
+      {current && (
         <div className="card-panel route-dropoff-panel">
           <div className="section-head compact">
             <div>
-              <p className="eyebrow accent">ROUTE DROP-OFFS</p>
-              <h3>จุดลงผู้โดยสาร: กรุงเทพฯ → {current.destination}</h3>
-              <p className="muted">ตรวจรายชื่อและที่นั่งก่อนถึงแต่ละจุด</p>
+              <p className="eyebrow accent">ROUTE PICKUPS & DROP-OFFS</p>
+              <h3>จุดรับ–ส่งผู้โดยสาร: กรุงเทพฯ → {current.destination}</h3>
+              <p className="muted">ตรวจคนขึ้นและคนลงแต่ละจุด เมื่อยืนยันคนลงแล้วที่นั่งจะว่างสำหรับผู้โดยสารใหม่</p>
             </div>
           </div>
           <div className="route-dropoff-list">
             {routeStops.map((stop, index) => {
               const riders = passengersAtStop(stop);
               const boardedRiders = riders.filter((rider) => rider.status === "Boarded");
+              const pickups = passengers.filter((rider) => rider.boardingPoint === stop && (rider.status === "Paid" || rider.status === "Pending Payment"));
               return (
                 <div className="route-dropoff-stop" key={stop}>
                   <div className="route-stop-marker">
@@ -3217,15 +3222,16 @@ function OperationsPage() {
                   </div>
                   <div>
                     <strong>{stop}</strong>
+                    <small>ขึ้น: {pickups.length ? pickups.map((rider) => `${rider.passengerName} (ที่นั่ง ${rider.seatNo})`).join(" · ") : "ไม่มีผู้โดยสารรอขึ้น"}</small>
                     {riders.length ? (
                       <small>
-                        {riders.map((rider) => `${rider.passengerName} (ที่นั่ง ${rider.seatNo})`).join(" · ")}
+                        ลง: {riders.map((rider) => `${rider.passengerName} (ที่นั่ง ${rider.seatNo})`).join(" · ")}
                       </small>
                     ) : (
                       <small>ไม่มีผู้โดยสารลงที่จุดนี้</small>
                     )}
                   </div>
-                  <span className="seat-capacity">{riders.length} คน</span>
+                  <span className="seat-capacity">ขึ้น {pickups.length} · ลง {riders.filter((rider) => rider.status === "Boarded" || rider.status === "Paid" || rider.status === "Pending Payment").length}</span>
                   {!!boardedRiders.length && (
                     <button
                       className="btn small primary"
@@ -3241,15 +3247,15 @@ function OperationsPage() {
           </div>
           <div className="schedule-control route-location-control">
             <select
-              value={currentStop || current.currentStop || routeStops[0] || ""}
+              value={selectedLocation}
               onChange={(event) => setCurrentStop(event.target.value)}
             >
-              {routeStops.map((stop) => <option key={stop}>{stop}</option>)}
+              {locationStops.map((stop) => <option key={stop}>{stop}</option>)}
             </select>
             <button
               className="btn primary"
-              disabled={!!busyAction || !routeStops.length}
-              onClick={() => runAction("location", () => updateCurrentStop(current.id, currentStop || current.currentStop || routeStops[0]))}
+              disabled={!!busyAction || !selectedLocation}
+              onClick={() => runAction("location", () => updateCurrentStop(current.id, selectedLocation))}
             >
               {busyAction === "location" ? "กำลังอัปเดต..." : "อัปเดตจุดที่รถถึงแล้ว"}
             </button>
