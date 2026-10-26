@@ -2,13 +2,18 @@
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 
+try:
+    from .journey import route_endpoints
+except ImportError:
+    from journey import route_endpoints
+
 BANGKOK = timezone(timedelta(hours=7))
 CAPACITIES = {"Toyota Commuter": 14, "Toyota Commuter Premium": 10, "Toyota Commuter VIP": 8}
 HORIZON_DAYS = 7
 
 
 def normalize_template(data):
-    destination = str(data.get("destination", "")).strip()
+    origin, destination = route_endpoints(data)
     plate = str(data.get("license_plate", "")).strip()
     vehicle_type = str(data.get("vehicle_type", ""))
     points = data.get("drop_off_points")
@@ -39,7 +44,7 @@ def normalize_template(data):
     enabled = data.get("enabled", True)
     if not isinstance(enabled, bool):
         raise ValueError("สถานะสายประจำไม่ถูกต้อง")
-    return dict(destination=destination, license_plate=plate, vehicle_type=vehicle_type,
+    return dict(origin=origin, destination=destination, license_plate=plate, vehicle_type=vehicle_type,
                 drop_off_points=points, departure_time=departure, start_date=start,
                 duration_minutes=duration, driver_id=driver, fare=fare,
                 total_seats=seats, enabled=enabled)

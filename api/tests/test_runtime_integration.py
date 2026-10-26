@@ -147,6 +147,79 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(rows[0]["boarding_point"], "Stop A")
         self.assertEqual(rows[0]["alighting_point"], "Test destination")
 
+    def test_staff_can_create_book_and_scan_a_return_trip(self):
+        outbound_id = self.trip()
+        data = {**self.template(), "origin": " Test destination ", "destination": " กรุงเทพฯ ",
+                "drop_off_points": ["Test destination", "Stop B", "Stop A", "กรุงเทพฯ"],
+                "departure_time": (datetime.now(self.api.BANGKOK) + timedelta(hours=1)).isoformat()}
+        response = self.call("POST", "/trips", "staff", data)
+        self.assertEqual(response.status_code, 201, response.json)
+        trip_id = response.json["trip"]["trip_id"]
+        trips = {int(t["id"]): t for t in self.call("GET", "/trips", "passenger").json["vans"]}
+        self.assertEqual(trips[outbound_id]["origin"], "กรุงเทพฯ")
+        self.assertEqual(trips[trip_id]["origin"], "Test destination")
+        self.assertEqual(trips[trip_id]["destination"], "กรุงเทพฯ")
+        self.assertEqual(trips[trip_id]["dropOffPoints"], ["Stop B", "Stop A", "กรุงเทพฯ"])
+        booking = dict(trip_id=trip_id, seat_number=1, boarding_point="Test destination", alighting_point="กรุงเทพฯ")
+        for pickup in ("กรุงเทพฯ", self.api.origin_boarding_points("กรุงเทพฯ")[1]):
+            rejected = self.call("POST", "/bookings", "passenger", {**booking, "boarding_point": pickup})
+            self.assertEqual(rejected.status_code, 400, rejected.json)
+        response = self.call("POST", "/bookings", "passenger", booking)
+        self.assertEqual(response.status_code, 201, response.json)
+        booking_id = response.json["booking"]["booking_id"]
+        saved = self.call("GET", "/bookings", "passenger").json["bookings"][0]
+        self.assertEqual((saved["origin"], saved["destination"]), ("Test destination", "กรุงเทพฯ"))
+        paid = self.call("POST", f"/bookings/{booking_id}/pay", "passenger", {})
+        self.assertEqual(paid.status_code, 200, paid.json)
+        self.assertEqual(self.call("POST", "/scan", "driver", {"qr_code": paid.json["ticket"]["qr_code"]}).status_code, 200)
+        wrong_location = self.api.origin_boarding_points("กรุงเทพฯ")[1]
+        self.assertEqual(self.call("PATCH", f"/trips/{trip_id}/location", "driver", {"current_stop": wrong_location}).status_code, 400)
+        self.assertEqual(self.call("PATCH", f"/trips/{trip_id}/location", "driver", {"current_stop": "Stop B"}).status_code, 200)
+        self.assertEqual(self.call("PATCH", f"/trips/{trip_id}/location", "driver", {"current_stop": "Test destination"}).status_code, 409)
+
+    def test_route_pairs_are_distinct_and_reused_without_changing_existing_routes(self):
+        original_id = self.trip()
+        data = {**self.template(), "destination": "Test destination",
+                "departure_time": (datetime.now(self.api.BANGKOK) + timedelta(hours=1)).isoformat()}
+        for origin in ("Other origin", "Other origin", "Test destination"):
+            payload = {**data, "origin": origin}
+            if origin == "Test destination":
+                payload["destination"] = "กรุงเทพฯ"
+            self.assertEqual(self.call("POST", "/trips", "staff", payload).status_code, 201)
+        self.assertEqual(self.query("SELECT count(*) n FROM route")[0]["n"], 3)
+        self.assertEqual(self.query("SELECT origin FROM route JOIN trip USING(route_id) WHERE trip_id=%s", (original_id,))[0]["origin"], "กรุงเทพฯ")
+
+    def test_route_endpoints_are_validated_for_daily_and_single_trips(self):
+        for changes in ({"origin": " "}, {"origin": None}, {"origin": []}, {"origin": "x" * 151},
+                        {"destination": "x" * 151}, {"origin": " Test destination "}):
+            data = {**self.template(), **changes}
+            response = self.call("POST", "/recurring-schedules", "staff", data)
+            self.assertEqual(response.status_code, 400, response.json)
+            data["departure_time"] = (datetime.now(self.api.BANGKOK) + timedelta(hours=1)).isoformat()
+            response = self.call("POST", "/trips", "staff", data)
+            self.assertEqual(response.status_code, 400, response.json)
+
+    def test_recurring_return_route_changes_preserve_booked_trips(self):
+        data = self.template()
+        result = self.call("POST", "/recurring-schedules", "staff", data)
+        self.assertEqual(result.status_code, 201, result.json)
+        recurring_id = result.json["recurring_id"]
+        trips = self.query("SELECT trip_id FROM trip ORDER BY service_date")
+        booked_id = trips[0]["trip_id"]
+        self.paid_ticket(booked_id)
+        data.update(origin="Test destination", destination="กรุงเทพฯ", drop_off_points=["Stop B", "Stop A"])
+        result = self.call("PUT", f"/recurring-schedules/{recurring_id}", "staff", data)
+        self.assertEqual(result.status_code, 200, result.json)
+        saved = self.call("GET", "/recurring-schedules", "staff").json["schedules"][0]
+        self.assertEqual((saved["origin"], saved["destination"]), ("Test destination", "กรุงเทพฯ"))
+        routes = self.query("SELECT trip_id,origin,destination FROM trip JOIN route USING(route_id) ORDER BY service_date")
+        self.assertEqual(routes[0]["origin"], "กรุงเทพฯ")
+        self.assertTrue(all((r["origin"], r["destination"]) == ("Test destination", "กรุงเทพฯ") for r in routes[1:]))
+        for enabled in (False, True):
+            data["enabled"] = enabled
+            self.assertEqual(self.call("PUT", f"/recurring-schedules/{recurring_id}", "staff", data).status_code, 200)
+        self.assertEqual(len(self.query("SELECT trip_id FROM trip")), len(trips))
+
     def test_mid_route_alighting_releases_seat_for_pickup_at_same_stop(self):
         trip_id = self.trip()
         booking_id, old_code = self.paid_ticket(trip_id)

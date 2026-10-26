@@ -388,7 +388,7 @@ function TripCard({ van, onBook }: { van: Van; onBook: (van: Van) => void }) {
       <div className="trip-route">
         <div>
           <small>ต้นทาง</small>
-          <strong>กรุงเทพฯ</strong>
+          <strong>{van.origin}</strong>
         </div>
         <div className="route-line">
           <span>{van.departureTime}</span>
@@ -724,7 +724,7 @@ function BookingPage({
                 <BusFront size={20} />
               </div>
               <div>
-                <strong>กรุงเทพฯ → {selectedVan.destination}</strong>
+                <strong>{selectedVan.origin} → {selectedVan.destination}</strong>
                 <small>
                   {thaiDate(date)} · {selectedVan.departureTime} น. ·{" "}
                   {selectedVan.plateNo}
@@ -788,7 +788,7 @@ function BookingPage({
           </div>
           <aside className="booking-summary card-panel">
             <span className="summary-label">สรุปการจอง</span>
-            <h3>{selectedVan.destination}</h3>
+            <h3>{selectedVan.origin} → {selectedVan.destination}</h3>
             <div className="summary-row">
               <span>เที่ยวรถ</span>
               <strong>{selectedVan.departureTime} น.</strong>
@@ -1005,7 +1005,7 @@ function DriverOverview({ onNavigate }: { onNavigate: (key: NavKey) => void }) {
           <div className="driver-route-summary">
             <div>
               <small>ต้นทาง</small>
-              <strong>กรุงเทพฯ</strong>
+              <strong>{nextTrip.origin}</strong>
             </div>
             <ArrowRight size={22} />
             <div>
@@ -1215,7 +1215,7 @@ function AdminOverview({ onNavigate }: { onNavigate: (key: NavKey) => void }) {
                 <BusFront size={18} />
               </div>
               <div>
-                <strong>กรุงเทพฯ → {v.destination}</strong>
+                <strong>{v.origin} → {v.destination}</strong>
                 <small>
                   {thaiDate(v.date)} · {v.departureTime} น. · {v.plateNo}
                 </small>
@@ -1841,7 +1841,7 @@ function QueueOverview({ onNavigate }: { onNavigate: (key: NavKey) => void }) {
               <BusFront size={18} />
             </div>
             <div>
-              <strong>กรุงเทพฯ → {v.destination}</strong>
+              <strong>{v.origin} → {v.destination}</strong>
               <small>
                 {thaiDate(v.date)} · ออก {v.departureTime} น. · ถึง{" "}
                 {v.arrivalTime || "-"} น. · {v.plateNo}
@@ -2420,7 +2420,7 @@ function TicketsPageV2() {
                 <div className="ticket-route-large">
                   <div>
                     <small>ต้นทาง</small>
-                    <strong>{b.boardingPoint || "กรุงเทพฯ"}</strong>
+                    <strong>{b.boardingPoint || van?.origin || b.origin || "ไม่ระบุ"}</strong>
                   </div>
                   <ArrowRight size={20} />
                   <div>
@@ -2569,6 +2569,7 @@ function TicketsPageV2() {
 }
 function CreateTripPage() {
   const { drivers, createVanSchedule } = useVan();
+  const [origin, setOrigin] = useState("กรุงเทพฯ");
   const [destination, setDestination] = useState("พัทยา");
   const [departure, setDeparture] = useState(
     bangkokDateTimeInput(new Date(Date.now() + 3600000)),
@@ -2591,6 +2592,7 @@ function CreateTripPage() {
     try {
       const [date, time] = departure.split("T");
       await createVanSchedule({
+        origin,
         destination,
         dropOffPoints,
         departureTime: time,
@@ -2620,7 +2622,7 @@ function CreateTripPage() {
         <div>
           <p className="eyebrow accent">TRIP MANAGEMENT</p>
           <h2>เพิ่มเที่ยวรถ</h2>
-          <p className="muted">กำหนดรถ คนขับ ปลายทาง และเวลาออกเดินทาง</p>
+          <p className="muted">กำหนดรถ คนขับ ต้นทาง ปลายทาง และเวลาออกเดินทาง</p>
         </div>
       </div>
       <RecurringSchedules />
@@ -2630,8 +2632,14 @@ function CreateTripPage() {
         {message && <div className="scan-result valid">{message}</div>}
         <div className="form-grid">
           <div className="field">
-            <label>ปลายทาง</label>
+            <label htmlFor="trip-origin">ต้นทาง</label>
+            <input id="trip-origin" value={origin} onChange={(e) => setOrigin(e.target.value)} required maxLength={150} placeholder="เช่น พัทยา" />
+          </div>
+          <div className="field">
+            <label htmlFor="trip-destination">ปลายทาง</label>
             <input
+              id="trip-destination"
+              maxLength={150}
               value={destination}
               onChange={(e) => setDestination(e.target.value)}
               required
@@ -2717,7 +2725,7 @@ function CreateTripPage() {
           </div>
         </div>
         <div className="form-actions">
-          <button className="btn primary" disabled={!driverId || !destination.trim() || !dropOffPoints.length || busy}>
+          <button className="btn primary" disabled={!driverId || !origin.trim() || !destination.trim() || origin.trim() === destination.trim() || !dropOffPoints.length || busy}>
             {busy ? "กำลังบันทึก..." : "บันทึกเที่ยวรถ"}{" "}
             <ArrowRight size={16} />
           </button>
@@ -3026,7 +3034,7 @@ function OperationsPage() {
   const passengers = bookings.filter(
     (b) => b.vanId === current?.id && b.status !== "Cancelled",
   );
-  const routeStops = current ? tripStops(current) : [];
+  const routeStops = current ? [current.origin, ...tripStops(current)] : [];
   const locationStops = routeStops.slice(Math.max(routeStops.indexOf(current?.currentStop || ""), 0));
   const selectedLocation = locationStops.includes(currentStop) ? currentStop : locationStops[0] || "";
   const passengersAtStop = (stop: string) =>
@@ -3114,7 +3122,7 @@ function OperationsPage() {
                 <BusFront size={19} />
               </div>
               <div>
-                <strong>กรุงเทพฯ → {v.destination}</strong>
+                <strong>{v.origin} → {v.destination}</strong>
                 <small>
                   {thaiDate(v.date)} · {v.departureTime} น. · {v.plateNo}
                 </small>
@@ -3205,7 +3213,7 @@ function OperationsPage() {
           <div className="section-head compact">
             <div>
               <p className="eyebrow accent">ROUTE PICKUPS & DROP-OFFS</p>
-              <h3>จุดรับ–ส่งผู้โดยสาร: กรุงเทพฯ → {current.destination}</h3>
+              <h3>จุดรับ–ส่งผู้โดยสาร: {current.origin} → {current.destination}</h3>
               <p className="muted">ตรวจคนขึ้นและคนลงแต่ละจุด เมื่อยืนยันคนลงแล้วที่นั่งจะว่างสำหรับผู้โดยสารใหม่</p>
             </div>
           </div>

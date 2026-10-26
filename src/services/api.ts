@@ -92,6 +92,7 @@ const mapVan = (v: any): Van => ({
     vanType: v.vanType,
     capacity: Number(v.capacity),
     status: v.status,
+    origin: v.origin || "กรุงเทพฯ",
     destination: v.destination,
     dropOffPoints: v.dropOffPoints || v.drop_off_points || [],
     departureTime: v.departureTime,
@@ -146,6 +147,7 @@ const mapBooking = (b: any): Booking => ({
     qrCode: b.qr_code,
     receiptNo: b.receipt_no ?? b.receiptNo,
     amount: b.amount ? Number(b.amount) : undefined,
+    origin: b.origin,
     destination: b.destination,
     plateNo: b.license_plate ?? b.plateNo,
     driverId: b.driver_id !== undefined
@@ -274,6 +276,7 @@ export const api = {
             body: JSON.stringify({ detail, incident_type: incidentType }),
         }),
         create: (data: {
+            origin: string;
             destination: string;
             drop_off_points: string[];
             departure_time: string;

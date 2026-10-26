@@ -5,13 +5,13 @@ import type { Van } from "../types/domain";
 const origin = ["หมอชิต", "เอกมัย"];
 const van: Van = {
   id: "1", plateNo: "TEST", vanType: "Toyota Commuter", capacity: 14,
-  status: "Waiting", destination: "พัทยา", dropOffPoints: ["บางนา", "ชลบุรี"],
+  status: "Waiting", origin: "กรุงเทพฯ", destination: "พัทยา", dropOffPoints: ["บางนา", "ชลบุรี"],
   departureTime: "10:00", price: 250, driverId: "1", occupiedSeats: [],
 };
 
 describe("Shared route pickup and drop-off points", () => {
   it("lets a stop be a pickup for one passenger and a drop-off for another", () => {
-    expect(boardingOptionsFor(van, origin)).toEqual(["หมอชิต", "เอกมัย", "บางนา", "ชลบุรี"]);
+    expect(boardingOptionsFor(van, origin)).toEqual(["กรุงเทพฯ", "หมอชิต", "เอกมัย", "บางนา", "ชลบุรี"]);
     expect(dropOffOptionsFor(van, "หมอชิต")).toContain("บางนา");
     expect(dropOffOptionsFor(van, "บางนา")).toEqual(["ชลบุรี", "พัทยา"]);
     expect(canTravelBetween(van, origin, "หมอชิต", "บางนา")).toBe(true);
@@ -44,7 +44,18 @@ describe("Shared route pickup and drop-off points", () => {
 
   it("adds the destination once at the end and supports trips without intermediate stops", () => {
     expect(tripStops({ ...van, dropOffPoints: ["พัทยา", "บางนา", "บางนา", "ชลบุรี"] })).toEqual(["บางนา", "ชลบุรี", "พัทยา"]);
-    expect(boardingOptionsFor({ ...van, dropOffPoints: [] }, origin)).toEqual(origin);
+    expect(boardingOptionsFor({ ...van, dropOffPoints: [] }, origin)).toEqual(["กรุงเทพฯ", ...origin]);
     expect(dropOffOptionsFor({ ...van, dropOffPoints: [] }, "หมอชิต")).toEqual(["พัทยา"]);
+  });
+
+  it("uses the return trip origin without adding Bangkok terminals as pickup options", () => {
+    const returning = { ...van, origin: "พัทยา", destination: "กรุงเทพฯ", dropOffPoints: ["พัทยา", "ชลบุรี", "บางนา", "กรุงเทพฯ"] };
+    expect(tripStops(returning)).toEqual(["ชลบุรี", "บางนา", "กรุงเทพฯ"]);
+    expect(boardingOptionsFor(returning, origin)).toEqual(["พัทยา", "ชลบุรี", "บางนา"]);
+    expect(dropOffOptionsFor(returning, "พัทยา")).toEqual(["ชลบุรี", "บางนา", "กรุงเทพฯ"]);
+    expect(canTravelBetween(returning, origin, "พัทยา", "กรุงเทพฯ")).toBe(true);
+    expect(canTravelBetween(returning, origin, "หมอชิต", "กรุงเทพฯ")).toBe(false);
+    expect(canTravelBetween(returning, origin, "บางนา", "ชลบุรี")).toBe(false);
+    expect(boardingOptionsFor({ ...returning, status: "Travelling", currentStop: "ชลบุรี" }, origin)).toEqual(["ชลบุรี", "บางนา"]);
   });
 });

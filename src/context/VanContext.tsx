@@ -82,6 +82,7 @@ interface VanContextType {
   updateArrivalTime: (vanId: string, newTime: string) => Promise<void>;
   updateCurrentStop: (vanId: string, currentStop: string) => Promise<void>;
   createVanSchedule: (data: {
+    origin: string;
     plateNo: string;
     vanType: string;
     capacity: number;
@@ -411,6 +412,7 @@ export const VanProvider: React.FC<{ children: React.ReactNode }> = ({
   };
 
   const createVanSchedule = async (data: {
+    origin: string;
     plateNo: string;
     vanType: string;
     capacity: number;
@@ -422,6 +424,7 @@ export const VanProvider: React.FC<{ children: React.ReactNode }> = ({
     date: string;
   }) => {
     await api.vans.create({
+      origin: data.origin,
       destination: data.destination,
       drop_off_points: data.dropOffPoints,
       departure_time: `${data.date}T${data.departureTime}:00+07:00`,
@@ -433,7 +436,7 @@ export const VanProvider: React.FC<{ children: React.ReactNode }> = ({
     });
     await refreshDatabase();
     addNotification(
-      `เพิ่มตารางเดินรถใหม่: ${data.destination} เวลา ${data.departureTime} น. วันที่ ${data.date}`,
+      `เพิ่มตารางเดินรถใหม่: ${data.origin} → ${data.destination} เวลา ${data.departureTime} น. วันที่ ${data.date}`,
       "schedule_change",
     );
   };

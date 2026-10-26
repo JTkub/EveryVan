@@ -2,14 +2,15 @@ import type { Van } from "../types/domain";
 
 /** Stops share pickup/drop-off roles; the final destination is always last. */
 export const tripStops = (van: Van): string[] => [
-  ...new Set((van.dropOffPoints || []).map((stop) => stop.trim()).filter((stop) => stop && stop !== van.destination)),
+  ...new Set((van.dropOffPoints || []).map((stop) => stop.trim()).filter((stop) => stop && stop !== van.destination && stop !== van.origin)),
   van.destination,
 ];
 
 export const boardingOptionsFor = (van: Van, originPoints: string[]): string[] => {
   const stops = tripStops(van);
   if (van.status === "Waiting") {
-    return [...new Set([...originPoints, ...stops.slice(0, -1)])].filter((stop) => stop !== van.destination);
+    const pickups = van.origin === "กรุงเทพฯ" ? [van.origin, ...originPoints] : [van.origin];
+    return [...new Set([...pickups, ...stops.slice(0, -1)])].filter((stop) => stop !== van.destination);
   }
   if (van.status !== "Departed" && van.status !== "Travelling") return [];
   const currentIndex = van.currentStop ? stops.indexOf(van.currentStop) : -1;

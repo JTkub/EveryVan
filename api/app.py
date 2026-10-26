@@ -19,9 +19,9 @@ except ImportError:
     from recurring import BANGKOK, generate_daily_trips, lock_generation, normalize_template
 
 try:
-    from .journey import ORIGIN_BOARDING_POINTS, route_stops
+    from .journey import origin_boarding_points, route_endpoints, route_stops
 except ImportError:
-    from journey import ORIGIN_BOARDING_POINTS, route_stops
+    from journey import origin_boarding_points, route_endpoints, route_stops
 
 ROOT = Path(__file__).resolve().parent
 load_dotenv(ROOT.parent / ".env")
@@ -915,14 +915,14 @@ def trips():
     u = current_user()
     with db().cursor() as c:
         c.execute(
-            "SELECT t.trip_id,t.trip_status,t.current_stop,t.current_stop_updated_at,t.drop_off_points,t.fare,r.destination,s.departure_time,s.arrive_time,v.vehicle_type,v.license_plate,v.total_seats,d.driver_id,d.user_id driver_user_id,d.name driver_name,d.photo,d.license_id,COALESCE(array_agg(b.seat_number) FILTER(WHERE b.booking_status NOT IN ('cancelled','completed','alighted')),ARRAY[]::text[]) occupied,COALESCE(array_agg(b.seat_number) FILTER(WHERE b.booking_status='pending'),ARRAY[]::text[]) pending FROM trip t JOIN route r USING(route_id) JOIN schedule s USING(schedule_id) JOIN vehicle v USING(vehicle_id) JOIN driver d USING(driver_id) LEFT JOIN booking b USING(trip_id) WHERE s.active_status GROUP BY t.trip_id,t.trip_status,t.current_stop,t.current_stop_updated_at,t.drop_off_points,t.fare,r.destination,s.departure_time,s.arrive_time,v.vehicle_type,v.license_plate,v.total_seats,d.driver_id,d.user_id,d.name,d.photo,d.license_id ORDER BY s.departure_time"
+            "SELECT t.trip_id,t.trip_status,t.current_stop,t.current_stop_updated_at,t.drop_off_points,t.fare,r.origin,r.destination,s.departure_time,s.arrive_time,v.vehicle_type,v.license_plate,v.total_seats,d.driver_id,d.user_id driver_user_id,d.name driver_name,d.photo,d.license_id,COALESCE(array_agg(b.seat_number) FILTER(WHERE b.booking_status NOT IN ('cancelled','completed','alighted')),ARRAY[]::text[]) occupied,COALESCE(array_agg(b.seat_number) FILTER(WHERE b.booking_status='pending'),ARRAY[]::text[]) pending FROM trip t JOIN route r USING(route_id) JOIN schedule s USING(schedule_id) JOIN vehicle v USING(vehicle_id) JOIN driver d USING(driver_id) LEFT JOIN booking b USING(trip_id) WHERE s.active_status GROUP BY t.trip_id,t.trip_status,t.current_stop,t.current_stop_updated_at,t.drop_off_points,t.fare,r.origin,r.destination,s.departure_time,s.arrive_time,v.vehicle_type,v.license_plate,v.total_seats,d.driver_id,d.user_id,d.name,d.photo,d.license_id ORDER BY s.departure_time"
         )
         out = []
         for x in c.fetchall():
             if u and u["role"] == "driver" and x["driver_user_id"] != u["user_id"]:
                 continue
             if not u or u["role"] == "passenger":
-                stops = route_stops(x["drop_off_points"], x["destination"])
+                stops = route_stops(x["drop_off_points"], x["destination"], x["origin"])
                 current_index = stops.index(x["current_stop"]) if x["current_stop"] in stops else -1
                 has_next_stop = max(current_index, 0) < len(stops) - 1
                 if x["trip_status"] != "waiting" and not (x["trip_status"] in ("travelling", "departed") and has_next_stop):
@@ -934,8 +934,9 @@ def trips():
                     "vanType": x["vehicle_type"],
                     "capacity": x["total_seats"],
                     "status": x["trip_status"].title(),
+                    "origin": x["origin"],
                     "destination": x["destination"],
-                    "dropOffPoints": route_stops(x["drop_off_points"], x["destination"]),
+                    "dropOffPoints": route_stops(x["drop_off_points"], x["destination"], x["origin"]),
                     "departureTime": x["departure_time"].strftime("%H:%M"),
                     "arrivalTime": (
                         x["arrive_time"].strftime("%H:%M") if x["arrive_time"] else None
@@ -974,7 +975,10 @@ def seats(trip_id):
 @require("staff", "dispatcher", "admin")
 def create_trip():
     d = body()
-    destination = str(d.get("destination", "")).strip()
+    try:
+        origin, destination = route_endpoints(d)
+    except ValueError as error:
+        return jsonify(error=str(error)), 400
     departure = d.get("departure_time")
     plate = str(d.get("license_plate", "")).strip()
     vehicle_type = str(d.get("vehicle_type", "Toyota Commuter")).strip()
@@ -1014,8 +1018,8 @@ def create_trip():
                 if not c.fetchone():
                     return jsonify(error="ไม่พบข้อมูลคนขับรถ"), 404
                 c.execute(
-                    "INSERT INTO route(origin,destination) VALUES('กรุงเทพฯ',%s) ON CONFLICT(origin,destination) DO UPDATE SET destination=EXCLUDED.destination RETURNING route_id",
-                    (destination,),
+                    "INSERT INTO route(origin,destination) VALUES(%s,%s) ON CONFLICT(origin,destination) DO UPDATE SET destination=EXCLUDED.destination RETURNING route_id",
+                    (origin, destination),
                 )
                 route = c.fetchone()["route_id"]
                 if vehicle_id is not None:
@@ -1068,7 +1072,7 @@ def create_trip():
 @require("staff", "dispatcher", "admin")
 def recurring_schedules():
     with db().cursor() as c:
-        c.execute("""SELECT rs.*,r.destination,v.license_plate,v.vehicle_type,v.total_seats,d.name driver_name
+        c.execute("""SELECT rs.*,r.origin,r.destination,v.license_plate,v.vehicle_type,v.total_seats,d.name driver_name
             FROM recurring_schedule rs JOIN route r USING(route_id)
             JOIN vehicle v USING(vehicle_id) JOIN driver d USING(driver_id)
             ORDER BY rs.departure_time,rs.recurring_id""")
@@ -1109,7 +1113,7 @@ def save_recurring_schedule(recurring_id=None):
                 vehicle = c.fetchone()
                 for number in range(1, data["total_seats"] + 1):
                     c.execute("INSERT INTO seat(vehicle_id,seat_number) VALUES(%s,%s)", (vehicle["vehicle_id"], str(number)))
-            c.execute("INSERT INTO route(origin,destination) VALUES('กรุงเทพฯ',%s) ON CONFLICT(origin,destination) DO UPDATE SET destination=EXCLUDED.destination RETURNING route_id", (data["destination"],))
+            c.execute("INSERT INTO route(origin,destination) VALUES(%s,%s) ON CONFLICT(origin,destination) DO UPDATE SET destination=EXCLUDED.destination RETURNING route_id", (data["origin"], data["destination"]))
             route_id = c.fetchone()["route_id"]
             values = (route_id, data["driver_id"], vehicle["vehicle_id"], data["departure_time"],
                       data["start_date"], data["duration_minutes"], data["fare"], json.dumps(data["drop_off_points"]), data["enabled"])
@@ -1144,7 +1148,7 @@ def bookings():
     )
     with db().cursor() as c:
         c.execute(
-            "SELECT b.*,u.first_name||' '||u.last_name passenger_name,u.phone,r.destination,s.departure_time,v.license_plate,d.driver_id,d.name driver_name,d.photo driver_photo,t.ticket_id,t.qr_code,pm.payment_status,pm.receipt_no,pm.amount FROM booking b JOIN passenger p USING(passenger_id) JOIN app_user u USING(user_id) JOIN trip tr ON tr.trip_id=b.trip_id JOIN route r ON r.route_id=tr.route_id JOIN schedule s ON s.schedule_id=tr.schedule_id JOIN vehicle v ON v.vehicle_id=tr.vehicle_id JOIN driver d ON d.driver_id=tr.driver_id LEFT JOIN ticket t USING(booking_id) LEFT JOIN payment pm USING(booking_id) WHERE 1=1 "
+            "SELECT b.*,u.first_name||' '||u.last_name passenger_name,u.phone,r.origin,r.destination,s.departure_time,v.license_plate,d.driver_id,d.name driver_name,d.photo driver_photo,t.ticket_id,t.qr_code,pm.payment_status,pm.receipt_no,pm.amount FROM booking b JOIN passenger p USING(passenger_id) JOIN app_user u USING(user_id) JOIN trip tr ON tr.trip_id=b.trip_id JOIN route r ON r.route_id=tr.route_id JOIN schedule s ON s.schedule_id=tr.schedule_id JOIN vehicle v ON v.vehicle_id=tr.vehicle_id JOIN driver d ON d.driver_id=tr.driver_id LEFT JOIN ticket t USING(booking_id) LEFT JOIN payment pm USING(booking_id) WHERE 1=1 "
             + filt
             + " ORDER BY b.booking_datetime DESC",
             ((u["user_id"],) if filt else ()),
@@ -1190,11 +1194,11 @@ def create_booking():
                     return jsonify(error="เที่ยวรถนี้ออกเดินทางแล้ว กรุณารอสถานะจุดรับถัดไป"), 409
                 if seat_number < 1 or seat_number > t["total_seats"]:
                     return jsonify(error="หมายเลขที่นั่งไม่ถูกต้อง"), 400
-                allowed_stops = route_stops(t["drop_off_points"], t["destination"])
+                allowed_stops = route_stops(t["drop_off_points"], t["destination"], t["origin"])
                 if alighting_point not in allowed_stops:
                     return jsonify(error="จุดลงรถนี้ไม่มีในเที่ยวรถที่เลือก"), 400
                 boarding_index = allowed_stops.index(boarding_point) if boarding_point in allowed_stops else -1
-                if boarding_index < 0 and boarding_point not in (*ORIGIN_BOARDING_POINTS, t["origin"]):
+                if boarding_index < 0 and boarding_point not in origin_boarding_points(t["origin"]):
                     return jsonify(error="จุดขึ้นรถนี้ไม่มีในเที่ยวรถที่เลือก"), 400
                 if allowed_stops.index(alighting_point) <= boarding_index:
                     return jsonify(error="จุดลงต้องอยู่หลังจุดขึ้นของคุณ"), 400
@@ -1461,8 +1465,8 @@ def trip_location(trip_id):
         current = c.fetchone()
         if not current:
             return jsonify(error="ไม่พบเที่ยวรถ"), 404
-        stops = route_stops(current["drop_off_points"], current["destination"])
-        if current_stop not in (*ORIGIN_BOARDING_POINTS, current["origin"], *stops):
+        stops = route_stops(current["drop_off_points"], current["destination"], current["origin"])
+        if current_stop not in (*origin_boarding_points(current["origin"]), *stops):
             return jsonify(error="จุดนี้ไม่มีในเส้นทางของเที่ยวรถ"), 400
         old_index = stops.index(current["current_stop"]) if current["current_stop"] in stops else -1
         new_index = stops.index(current_stop) if current_stop in stops else -1

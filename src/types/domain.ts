@@ -21,6 +21,7 @@ export interface Van {
   vanType: string;
   capacity: number;
   status: "Waiting" | "Travelling" | "Departed" | "Accident" | "Completed";
+  origin: string;
   destination: string;
   /** จุดรับ–ส่งที่ผู้จัดคิวกำหนดตามลำดับเส้นทาง */
   dropOffPoints?: string[];
@@ -39,6 +40,7 @@ export interface Van {
 }
 
 export interface RecurringScheduleInput {
+  origin: string;
   destination: string;
   drop_off_points: string[];
   departure_time: string;
@@ -85,6 +87,7 @@ export interface Booking {
   qrCode?: string;
   receiptNo?: string;
   amount?: number;
+  origin?: string;
   destination?: string;
   plateNo?: string;
   driverId?: string;

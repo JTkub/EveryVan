@@ -6,7 +6,7 @@ import { bangkokDateInput } from "../utils/date";
 import { VEHICLE_CAPACITIES, vehicleCapacity } from "../utils/vehicle";
 
 const emptyForm = (): RecurringScheduleInput => ({
-  destination: "", drop_off_points: [], departure_time: "08:00", start_date: bangkokDateInput(),
+  origin: "กรุงเทพฯ", destination: "", drop_off_points: [], departure_time: "08:00", start_date: bangkokDateInput(),
   duration_minutes: 120, vehicle_type: "Toyota Commuter", license_plate: "", total_seats: 14,
   driver_id: 0, price: 220, enabled: true,
 });
@@ -56,7 +56,7 @@ export function RecurringSchedules() {
     <div className="card-panel">
       <div className="section-head compact"><h3>สายประจำ</h3><button className="btn small outline" disabled={busy || loading} onClick={() => { setError(""); void load(); }}>โหลดใหม่</button></div>
       {loading ? <p className="muted">กำลังโหลด...</p> : items.length === 0 ? <p className="muted">ยังไม่มีสายประจำ เพิ่มรายการด้านล่างเพื่อเริ่มจัดคิวอัตโนมัติ</p> : items.map(item => <div className="recurring-row" key={item.recurring_id}>
-        <div><strong>{item.destination} · {item.departure_time} น.</strong><p className="muted">{item.license_plate} · {item.driver_name} · {Number(item.price).toLocaleString()} บาท</p>
+        <div><strong>{item.origin} → {item.destination} · {item.departure_time} น.</strong><p className="muted">{item.license_plate} · {item.driver_name} · {Number(item.price).toLocaleString()} บาท</p>
           <small>{item.enabled ? "เปิดใช้งานทุกวัน" : "พักสายประจำ"} · เริ่ม {item.start_date}</small></div>
         <div className="action-buttons"><button type="button" className="btn small outline" disabled={busy} onClick={() => { setEditing(item.recurring_id); setForm({ ...item, price: Number(item.price) }); setStops(item.drop_off_points.join("\n")); setError(""); setMessage(""); }}>แก้ไข</button>
           <button type="button" className="btn small outline" disabled={busy} onClick={() => void toggle(item)}>{item.enabled ? "พักสาย" : "เปิดสาย"}</button></div>
@@ -66,6 +66,7 @@ export function RecurringSchedules() {
       <h3>{editing ? "แก้ไขสายประจำ" : "เพิ่มสายประจำ"}</h3>
       <p className="muted">การแก้ไขมีผลกับเที่ยวที่ยังไม่ออกเดินทาง ยังไม่มีผู้จอง และยังไม่ถูกปรับเฉพาะวัน</p>
       <div className="form-grid">
+        <div className="field"><label htmlFor="recurring-origin">ต้นทาง</label><input id="recurring-origin" required maxLength={150} value={form.origin} onChange={e => change("origin", e.target.value)} placeholder="เช่น พัทยา" /></div>
         <div className="field"><label htmlFor="recurring-destination">ปลายทาง</label><input id="recurring-destination" required maxLength={150} value={form.destination} onChange={e => change("destination", e.target.value)} /></div>
         <div className="field"><label htmlFor="recurring-time">เวลาออกทุกวัน</label><input id="recurring-time" type="time" required value={form.departure_time} onChange={e => change("departure_time", e.target.value)} /></div>
         <div className="field"><label htmlFor="recurring-start">วันที่เริ่ม</label><input id="recurring-start" type="date" required value={form.start_date} onChange={e => change("start_date", e.target.value)} /></div>
